@@ -1,0 +1,87 @@
+{
+ "actions": [],
+ "creation": "2026-07-06 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "wavespeed_api_key",
+  "section_break_limits",
+  "max_file_size_mb",
+  "max_audio_duration_seconds",
+  "column_break_1",
+  "cost_per_second_usd",
+  "store_outputs_locally"
+ ],
+ "fields": [
+  {
+   "default": "0",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "wavespeed_api_key",
+   "fieldtype": "Password",
+   "label": "WaveSpeed API Key"
+  },
+  {
+   "fieldname": "section_break_limits",
+   "fieldtype": "Section Break",
+   "label": "Limits"
+  },
+  {
+   "default": "50",
+   "fieldname": "max_file_size_mb",
+   "fieldtype": "Int",
+   "label": "Max File Size (MB)",
+   "non_negative": 1
+  },
+  {
+   "default": "600",
+   "fieldname": "max_audio_duration_seconds",
+   "fieldtype": "Int",
+   "label": "Max Audio Duration (seconds)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0.001",
+   "fieldname": "cost_per_second_usd",
+   "fieldtype": "Currency",
+   "label": "Cost Per Second (USD)",
+   "non_negative": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "store_outputs_locally",
+   "fieldtype": "Check",
+   "label": "Store Outputs Locally"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-07-06 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Audio Stem",
+ "name": "Audio Separation Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

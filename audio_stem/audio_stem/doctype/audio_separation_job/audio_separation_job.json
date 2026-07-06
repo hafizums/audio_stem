@@ -1,0 +1,174 @@
+{
+ "actions": [],
+ "autoname": "format:ASJ-{YYYY}-{#####}",
+ "creation": "2026-07-06 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "status",
+  "column_break_1",
+  "original_file",
+  "original_filename",
+  "duration_seconds",
+  "section_break_provider",
+  "provider",
+  "provider_model",
+  "provider_cost_usd",
+  "section_break_outputs",
+  "vocal_output_url",
+  "instrumental_output_url",
+  "column_break_2",
+  "vocal_file",
+  "instrumental_file",
+  "section_break_meta",
+  "error_message",
+  "started_at",
+  "completed_at"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "User",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nQueued\nUploading\nProcessing\nCompleted\nFailed\nCancelled",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "original_file",
+   "fieldtype": "Attach",
+   "label": "Original File"
+  },
+  {
+   "fieldname": "original_filename",
+   "fieldtype": "Data",
+   "label": "Original Filename",
+   "read_only": 1
+  },
+  {
+   "fieldname": "duration_seconds",
+   "fieldtype": "Int",
+   "label": "Duration (seconds)",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_provider",
+   "fieldtype": "Section Break",
+   "label": "Provider"
+  },
+  {
+   "fieldname": "provider",
+   "fieldtype": "Data",
+   "label": "Provider",
+   "read_only": 1
+  },
+  {
+   "fieldname": "provider_model",
+   "fieldtype": "Data",
+   "label": "Provider Model",
+   "read_only": 1
+  },
+  {
+   "fieldname": "provider_cost_usd",
+   "fieldtype": "Currency",
+   "label": "Provider Cost (USD)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_outputs",
+   "fieldtype": "Section Break",
+   "label": "Outputs"
+  },
+  {
+   "fieldname": "vocal_output_url",
+   "fieldtype": "Small Text",
+   "label": "Vocal Output URL",
+   "read_only": 1
+  },
+  {
+   "fieldname": "instrumental_output_url",
+   "fieldtype": "Small Text",
+   "label": "Instrumental Output URL",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "vocal_file",
+   "fieldtype": "Attach",
+   "label": "Vocal File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "instrumental_file",
+   "fieldtype": "Attach",
+   "label": "Instrumental File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_meta",
+   "fieldtype": "Section Break",
+   "label": "Processing"
+  },
+  {
+   "fieldname": "error_message",
+   "fieldtype": "Small Text",
+   "label": "Error Message",
+   "read_only": 1
+  },
+  {
+   "fieldname": "started_at",
+   "fieldtype": "Datetime",
+   "label": "Started At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "completed_at",
+   "fieldtype": "Datetime",
+   "label": "Completed At",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-06 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Audio Stem",
+ "name": "Audio Separation Job",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}
