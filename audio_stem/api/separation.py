@@ -38,9 +38,8 @@ def start_separation(job_name: str):
 	frappe.enqueue(
 		"audio_stem.workers.separation_worker.process_audio_separation",
 		queue="long",
-		job_name=f"audio_separation:{job.name}",
 		job_id=f"audio_separation:{job.name}",
-		job=job.name,
+		name=job.name,
 	)
 
 	return {"status": job.status, "name": job.name}

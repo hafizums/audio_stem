@@ -16,8 +16,16 @@ from audio_stem.workers.separation_worker import process_audio_separation
 class TestAudioSeparation(FrappeTestCase):
 	def setUp(self):
 		settings = frappe.get_single("Audio Separation Settings")
+		self._saved_enabled = settings.enabled
+		self._saved_api_key = settings.get_password("wavespeed_api_key", raise_exception=False)
 		settings.enabled = 1
 		settings.wavespeed_api_key = "test-api-key"
+		settings.save(ignore_permissions=True)
+
+	def tearDown(self):
+		settings = frappe.get_single("Audio Separation Settings")
+		settings.enabled = self._saved_enabled
+		settings.wavespeed_api_key = self._saved_api_key or ""
 		settings.save(ignore_permissions=True)
 
 	def _create_job(self, with_file: bool = True):
@@ -70,10 +78,19 @@ class TestAudioSeparation(FrappeTestCase):
 	def test_output_order_mapping(self):
 		vocal_url = "https://example.com/vocal.mp3"
 		instrumental_url = "https://example.com/instrumental.mp3"
+		mock_client = type(
+			"MockClient",
+			(),
+			{
+				"upload": lambda self, path: "https://example.com/uploaded.mp3",
+				"run": lambda self, model, payload: {
+					"outputs": [vocal_url, instrumental_url]
+				},
+			},
+		)()
 
-		with patch("wavespeed.upload", return_value="https://example.com/uploaded.mp3"), patch(
-			"wavespeed.run",
-			return_value={"outputs": [vocal_url, instrumental_url]},
+		with patch("audio_stem.integrations.wavespeed_client._get_api_key", return_value="test-api-key"), patch(
+			"wavespeed.Client", return_value=mock_client
 		):
 			result = isolate_vocal_and_instrumental("/tmp/fake.mp3")
 

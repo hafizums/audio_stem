@@ -15,25 +15,28 @@ class SeparationResult(NamedTuple):
 	instrumental_url: str
 
 
+def _get_api_key() -> str:
+	settings = frappe.get_doc("Audio Separation Settings", "Audio Separation Settings")
+	api_key = (settings.get_password("wavespeed_api_key", raise_exception=False) or "").strip()
+	if not api_key:
+		frappe.throw(_("WaveSpeed API key is not configured in Audio Separation Settings."))
+	return api_key
+
+
 def isolate_vocal_and_instrumental(local_audio_path: str) -> SeparationResult:
 	settings = frappe.get_single("Audio Separation Settings")
 	if not settings.enabled:
 		frappe.throw(_("Audio separation is disabled in Audio Separation Settings."))
 
-	api_key = settings.get_password("wavespeed_api_key")
-	if not api_key:
-		frappe.throw(_("WaveSpeed API key is not configured in Audio Separation Settings."))
+	api_key = _get_api_key()
 
 	import wavespeed
-	import wavespeed.api as ws_api
-	import wavespeed.config as ws_config
 
 	os.environ["WAVESPEED_API_KEY"] = api_key
-	ws_config.api.api_key = api_key
-	ws_api._default_client = None
+	client = wavespeed.Client(api_key=api_key)
 
-	uploaded_url = wavespeed.upload(local_audio_path)
-	output = wavespeed.run(
+	uploaded_url = client.upload(local_audio_path)
+	output = client.run(
 		PROVIDER_MODEL,
 		{"audio": uploaded_url},
 	)

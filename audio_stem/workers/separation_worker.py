@@ -10,8 +10,8 @@ from frappe.utils.file_manager import get_file_path
 from audio_stem.integrations.wavespeed_client import isolate_vocal_and_instrumental
 
 
-def process_audio_separation(job_name: str):
-	job = frappe.get_doc("Audio Separation Job", job_name)
+def process_audio_separation(name: str):
+	job = frappe.get_doc("Audio Separation Job", name)
 
 	try:
 		job.status = "Uploading"
