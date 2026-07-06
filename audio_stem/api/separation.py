@@ -8,9 +8,27 @@ from frappe import _
 from frappe.utils import cint, flt
 
 from audio_stem.utils.audio import get_audio_duration_seconds
+from audio_stem.utils.limits import (
+	ACTIVE_STATUSES,
+	STARTABLE_STATUSES,
+	calculate_provider_cost,
+	ensure_enabled,
+	ensure_single_active_job,
+	get_limits_payload,
+	get_settings,
+	user_has_other_active_job,
+	validate_duration,
+	validate_file_size,
+)
 
 PROVIDER = "WaveSpeed"
 PROVIDER_MODEL = "wavespeed-ai/audio-vocal-isolator"
+DEFAULT_DISPLAY_CURRENCY = "MYR"
+
+
+def _get_display_currency() -> str:
+	currency = frappe.db.get_single_value("Audio Separation Settings", "display_currency")
+	return currency or DEFAULT_DISPLAY_CURRENCY
 
 
 def _is_system_manager() -> bool:
@@ -33,7 +51,51 @@ def _get_job_for_user(job_name: str):
 	return frappe.get_doc("Audio Separation Job", job_name)
 
 
+def _get_attached_file_doc(file_url: str):
+	file_name = frappe.db.get_value("File", {"file_url": file_url}, "name")
+	if not file_name:
+		frappe.throw(_("Uploaded file not found"))
+	return frappe.get_doc("File", file_name)
+
+
+def _can_start_job(job, settings=None) -> tuple[bool, str | None]:
+	settings = settings or get_settings()
+
+	if not cint(settings.enabled):
+		return False, _("Audio separation is disabled in Audio Separation Settings.")
+
+	if job.status in ACTIVE_STATUSES:
+		return False, _("This job is already running.")
+
+	if job.status == "Completed":
+		return False, _("This job is already completed.")
+
+	if job.status not in STARTABLE_STATUSES:
+		return False, _("This job cannot be started.")
+
+	if not job.original_file:
+		return False, _("Please attach an audio file before starting separation.")
+
+	if not cint(job.duration_seconds):
+		return False, _(
+			"Audio duration could not be detected. Separation cannot be started until duration is available."
+		)
+
+	try:
+		file_doc = _get_attached_file_doc(job.original_file)
+		validate_file_size(file_doc, settings)
+		validate_duration(job.duration_seconds, settings, require_duration=True)
+	except frappe.ValidationError as exc:
+		return False, str(exc)
+
+	if not _is_system_manager() and user_has_other_active_job(job.user, exclude_job_name=job.name):
+		return False, _("You already have an active separation job. Please wait for it to finish.")
+
+	return True, None
+
+
 def _job_payload(job):
+	can_start, blocked_reason = _can_start_job(job)
 	return {
 		"name": job.name,
 		"status": job.status,
@@ -44,16 +106,12 @@ def _job_payload(job):
 		"error_message": job.error_message,
 		"duration_seconds": cint(job.duration_seconds),
 		"provider_cost_usd": flt(job.provider_cost_usd),
-		"estimated_cost_usd": _estimate_cost(job.duration_seconds),
+		"estimated_cost_usd": calculate_provider_cost(job.duration_seconds),
+		"display_currency": _get_display_currency(),
+		"can_start": can_start,
+		"start_blocked_reason": blocked_reason,
+		"is_active": job.status in ACTIVE_STATUSES,
 	}
-
-
-def _estimate_cost(duration_seconds):
-	settings = frappe.get_single("Audio Separation Settings")
-	duration = cint(duration_seconds)
-	if not duration:
-		return None
-	return flt(duration) * flt(settings.cost_per_second_usd)
 
 
 def _resolve_original_filename(file_url: str) -> str | None:
@@ -70,17 +128,20 @@ def create_job_from_file(file_url: str):
 	if not file_url:
 		frappe.throw(_("file_url is required"))
 
-	file_name = frappe.db.get_value("File", {"file_url": file_url}, "name")
-	if not file_name:
-		frappe.throw(_("Uploaded file not found"))
+	settings = get_settings()
+	ensure_enabled(settings)
 
-	file_doc = frappe.get_doc("File", file_name)
+	file_doc = _get_attached_file_doc(file_url)
+	validate_file_size(file_doc, settings)
 
 	duration_seconds = None
 	try:
 		duration_seconds = get_audio_duration_seconds(file_doc.get_full_path())
 	except Exception:
 		duration_seconds = None
+
+	if duration_seconds:
+		validate_duration(duration_seconds, settings)
 
 	job = frappe.get_doc(
 		{
@@ -107,9 +168,10 @@ def get_job_status(job_name: str):
 @frappe.whitelist()
 def get_page_settings():
 	_require_login()
+	limits = get_limits_payload()
 	return {
-		"enabled": cint(frappe.db.get_single_value("Audio Separation Settings", "enabled")),
-		"cost_per_second_usd": flt(frappe.db.get_single_value("Audio Separation Settings", "cost_per_second_usd")),
+		**limits,
+		"display_currency": _get_display_currency(),
 	}
 
 
@@ -142,17 +204,35 @@ def get_recent_jobs(limit=10):
 def start_separation(job_name: str):
 	_require_login()
 	job = _get_job_for_user(job_name)
+	settings = get_settings()
 
-	if job.status not in ("Draft", "Failed"):
+	if job.status in ACTIVE_STATUSES:
+		return {
+			"status": job.status,
+			"name": job.name,
+			"already_active": True,
+			"provider_cost_usd": flt(job.provider_cost_usd),
+		}
+
+	if job.status == "Completed":
+		frappe.throw(_("This job is already completed."))
+
+	if job.status not in STARTABLE_STATUSES:
 		frappe.throw(_("Job can only be started from Draft or Failed status."))
+
+	ensure_enabled(settings)
 
 	if not job.original_file:
 		frappe.throw(_("Please attach an audio file before starting separation."))
 
-	settings = frappe.get_single("Audio Separation Settings")
-	if not settings.enabled:
-		frappe.throw(_("Audio separation is disabled in Audio Separation Settings."))
+	file_doc = _get_attached_file_doc(job.original_file)
+	validate_file_size(file_doc, settings)
+	validate_duration(job.duration_seconds, settings, require_duration=True)
 
+	if not _is_system_manager():
+		ensure_single_active_job(job.user, exclude_job_name=job.name)
+
+	job.provider_cost_usd = calculate_provider_cost(job.duration_seconds, settings)
 	job.status = "Queued"
 	job.provider = PROVIDER
 	job.provider_model = PROVIDER_MODEL
@@ -172,4 +252,9 @@ def start_separation(job_name: str):
 		name=job.name,
 	)
 
-	return {"status": job.status, "name": job.name}
+	return {
+		"status": job.status,
+		"name": job.name,
+		"provider_cost_usd": flt(job.provider_cost_usd),
+		"already_active": False,
+	}

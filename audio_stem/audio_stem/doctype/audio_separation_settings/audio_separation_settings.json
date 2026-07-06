@@ -11,6 +11,7 @@
   "max_audio_duration_seconds",
   "column_break_1",
   "cost_per_second_usd",
+  "display_currency",
   "store_outputs_locally"
  ],
  "fields": [
@@ -54,6 +55,13 @@
    "fieldtype": "Currency",
    "label": "Cost Per Second (USD)",
    "non_negative": 1
+  },
+  {
+   "default": "MYR",
+   "fieldname": "display_currency",
+   "fieldtype": "Link",
+   "label": "Display Currency",
+   "options": "Currency"
   },
   {
    "default": "0",

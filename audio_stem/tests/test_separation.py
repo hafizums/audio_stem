@@ -44,6 +44,7 @@ class TestAudioSeparation(FrappeTestCase):
 		)
 		if with_file:
 			job.original_file = self._attach_test_file()
+			job.duration_seconds = 30
 		job.insert(ignore_permissions=True)
 		return job
 
@@ -79,6 +80,7 @@ class TestAudioSeparation(FrappeTestCase):
 		self.assertEqual(job.status, "Queued")
 		self.assertEqual(job.provider, "WaveSpeed")
 		self.assertEqual(job.provider_model, "wavespeed-ai/audio-vocal-isolator")
+		self.assertGreater(job.provider_cost_usd, 0)
 		enqueue_mock.assert_called_once()
 
 	def test_output_order_mapping(self):

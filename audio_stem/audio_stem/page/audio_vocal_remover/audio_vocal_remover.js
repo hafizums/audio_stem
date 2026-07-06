@@ -13,6 +13,11 @@ frappe.pages["audio-vocal-remover"].on_page_load = function (wrapper) {
 		job_name: null,
 		poll_timer: null,
 		cost_per_second: null,
+		display_currency: "MYR",
+		max_file_size_mb: null,
+		max_audio_duration_seconds: null,
+		enabled: 1,
+		starting: false,
 	};
 
 	load_settings();
@@ -26,6 +31,10 @@ frappe.pages["audio-vocal-remover"].on_page_load = function (wrapper) {
 				if (!r.message) return;
 				state.cost_per_second = r.message.cost_per_second_usd || 0;
 				state.enabled = r.message.enabled;
+				state.display_currency = r.message.display_currency || "MYR";
+				state.max_file_size_mb = r.message.max_file_size_mb;
+				state.max_audio_duration_seconds = r.message.max_audio_duration_seconds;
+				render_limits();
 			},
 		});
 	}
@@ -34,6 +43,7 @@ frappe.pages["audio-vocal-remover"].on_page_load = function (wrapper) {
 		root.empty();
 
 		root.append(section(__("Upload Audio"), "upload-section"));
+		root.append(section(__("Limits"), "limits-section"));
 		root.append(section(__("Cost Estimate"), "estimate-section"));
 		root.append(section(__("Start Separation"), "start-section"));
 		root.append(section(__("Job Status"), "status-section"));
@@ -43,6 +53,7 @@ frappe.pages["audio-vocal-remover"].on_page_load = function (wrapper) {
 		root.append(section(__("Recent Jobs"), "recent-jobs-section"));
 
 		render_upload();
+		render_limits();
 		render_estimate();
 		render_start_button();
 		render_status();
@@ -99,6 +110,24 @@ frappe.pages["audio-vocal-remover"].on_page_load = function (wrapper) {
 		});
 	}
 
+	function render_limits() {
+		const body = root.find(".limits-section .avr-body");
+		if (!body.length) return;
+		body.empty();
+
+		if (!state.max_file_size_mb && !state.max_audio_duration_seconds) {
+			body.append(`<p class="avr-muted">${__("Loading limits...")}</p>`);
+			return;
+		}
+
+		body.html(
+			`<p class="avr-muted">${__(
+				"Max file size: {0} MB. Max duration: {1} seconds.",
+				[state.max_file_size_mb, state.max_audio_duration_seconds]
+			)}</p>`
+		);
+	}
+
 	function render_estimate() {
 		const body = root.find(".estimate-section .avr-body");
 		body.empty();
@@ -116,7 +145,7 @@ frappe.pages["audio-vocal-remover"].on_page_load = function (wrapper) {
 			const cost = job.estimated_cost_usd ?? job.duration_seconds * (state.cost_per_second || 0);
 			body.html(
 				`${__("Duration")}: <strong>${job.duration_seconds}s</strong><br>` +
-					`${__("Estimated provider cost")}: <strong>${format_currency(cost)}</strong>`
+					`${__("Estimated provider cost")}: <strong>${format_cost_amount(cost)}</strong>`
 			);
 			return;
 		}
@@ -133,12 +162,15 @@ frappe.pages["audio-vocal-remover"].on_page_load = function (wrapper) {
 		);
 
 		btn.on("click", () => {
-			if (!state.job_name) return;
+			if (!state.job_name || state.starting) return;
 
 			if (state.enabled === 0) {
 				frappe.msgprint(__("Audio separation is disabled in Audio Separation Settings."));
 				return;
 			}
+
+			state.starting = true;
+			update_start_button();
 
 			frappe.call({
 				method: "audio_stem.api.separation.start_separation",
@@ -146,20 +178,46 @@ frappe.pages["audio-vocal-remover"].on_page_load = function (wrapper) {
 				freeze: true,
 				freeze_message: __("Starting separation..."),
 				callback(r) {
-					if (!r.message) return;
-					poll_job_status();
+					state.starting = false;
+					if (!r.message) {
+						update_start_button();
+						return;
+					}
+					if (r.message.already_active) {
+						frappe.show_alert({
+							message: __("This job is already running."),
+							indicator: "blue",
+						});
+					}
+					fetch_job_status();
+				},
+				error() {
+					state.starting = false;
+					update_start_button();
 				},
 			});
 		});
 
 		state.start_button = btn;
+		if (!body.find(".start-blocked-reason").length) {
+			$('<div class="start-blocked-reason avr-muted" style="margin-top:0.5rem;"></div>').appendTo(body);
+		}
 		update_start_button();
 	}
 
-	function update_start_button() {
+	function update_start_button(job) {
 		if (!state.start_button) return;
-		const enabled = Boolean(state.job_name);
-		state.start_button.prop("disabled", !enabled);
+		const can_start = job ? job.can_start : false;
+		const is_active = job ? job.is_active : false;
+		const disabled = !state.job_name || !can_start || is_active || state.starting || state.enabled === 0;
+		state.start_button.prop("disabled", disabled);
+
+		const reason_el = root.find(".start-blocked-reason");
+		if (!job || can_start || is_active) {
+			reason_el.text("");
+			return;
+		}
+		reason_el.text(job.start_blocked_reason || __("Start is not available for this job."));
 	}
 
 	function render_status() {
@@ -183,6 +241,8 @@ frappe.pages["audio-vocal-remover"].on_page_load = function (wrapper) {
 		badge.text(`${__("Status")}: ${job.status}`);
 
 		if (job.status === "Failed" && job.error_message) {
+			error.text(job.error_message).show();
+		} else if (job.status === "Completed" && job.error_message) {
 			error.text(job.error_message).show();
 		} else {
 			error.hide();
@@ -234,10 +294,13 @@ frappe.pages["audio-vocal-remover"].on_page_load = function (wrapper) {
 	}
 
 	function update_from_job(job) {
+		if (job?.display_currency) {
+			state.display_currency = job.display_currency;
+		}
 		update_estimate(job);
 		update_status(job);
 		update_audio_sections(job);
-		update_start_button();
+		update_start_button(job);
 
 		if (job && ["Queued", "Uploading", "Processing"].includes(job.status)) {
 			if (!state.poll_timer) {
@@ -335,7 +398,6 @@ frappe.pages["audio-vocal-remover"].on_page_load = function (wrapper) {
 					e.preventDefault();
 					state.job_name = $(this).attr("data-job-name");
 					fetch_job_status();
-					update_start_button();
 					frappe.show_alert({
 						message: __("Loaded job {0}", [state.job_name]),
 						indicator: "blue",
@@ -345,8 +407,8 @@ frappe.pages["audio-vocal-remover"].on_page_load = function (wrapper) {
 		});
 	}
 
-	function format_currency(value) {
-		return frappe.format(value, { fieldtype: "Currency" });
+	function format_cost_amount(value) {
+		return format_currency(value, state.display_currency || "MYR");
 	}
 
 	$(wrapper).on("pagehide", () => {
