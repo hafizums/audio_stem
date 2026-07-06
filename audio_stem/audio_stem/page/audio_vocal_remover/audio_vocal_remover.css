@@ -1,0 +1,37 @@
+.audio-vocal-remover .avr-section {
+	margin-bottom: 1.5rem;
+	padding: 1rem;
+	border: 1px solid var(--border-color);
+	border-radius: var(--border-radius);
+	background: var(--card-bg);
+}
+
+.audio-vocal-remover .avr-section h5 {
+	margin-top: 0;
+	margin-bottom: 0.75rem;
+}
+
+.audio-vocal-remover .avr-muted {
+	color: var(--text-muted);
+}
+
+.audio-vocal-remover audio {
+	width: 100%;
+	margin-top: 0.5rem;
+}
+
+.audio-vocal-remover .avr-actions {
+	margin-top: 0.75rem;
+	display: flex;
+	gap: 0.5rem;
+	flex-wrap: wrap;
+}
+
+.audio-vocal-remover .avr-status-badge {
+	font-weight: 600;
+}
+
+.audio-vocal-remover .avr-error {
+	color: var(--red-600);
+	margin-top: 0.5rem;
+}
