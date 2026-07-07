@@ -29,7 +29,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Action",
-   "options": "Create Job\nStart Job\nRetry Job\nCancel Job\nComplete Job\nFail Job\nCreate ZIP\nCleanup\nAdmin View",
+   "options": "Create Job\nStart Job\nRetry Job\nCancel Job\nComplete Job\nFail Job\nCreate ZIP\nCleanup\nAdmin View\nStart Transcription\nComplete Transcription\nFail Transcription\nDownload Transcript\nStart Karaoke\nComplete Karaoke\nFail Karaoke",
    "reqd": 1
   },
   {

@@ -273,6 +273,62 @@ def _job_detail_payload(job):
 		"consumed_amount": flt(job.consumed_amount),
 		"credit_type": job.credit_type,
 		"credit_error": job.credit_error,
+		**_transcription_karaoke_payload(job),
+	}
+
+
+def _transcription_karaoke_payload(job):
+	from audio_stem.utils.transcription_karaoke_controls import (
+		can_start_karaoke,
+		can_start_transcription,
+		is_karaoke_enabled,
+		karaoke_queue_is_stale,
+		transcription_queue_is_stale,
+	)
+	from audio_stem.integrations.openai_transcription_client import is_openai_transcription_enabled
+
+	settings = get_settings()
+	can_transcribe, transcription_blocked_reason = can_start_transcription(job)
+	can_karaoke, karaoke_blocked_reason = can_start_karaoke(job)
+	return {
+		"openai_enabled": is_openai_transcription_enabled(),
+		"karaoke_enabled": is_karaoke_enabled(),
+		"transcription_status": job.get("transcription_status") or "Not Started",
+		"transcription_source": job.get("transcription_source"),
+		"transcription_model": job.get("transcription_model"),
+		"transcription_language": job.get("transcription_language"),
+		"transcript_text": job.get("transcript_text"),
+		"transcript_json_file": job.get("transcript_json_file"),
+		"transcript_srt_file": job.get("transcript_srt_file"),
+		"transcript_vtt_file": job.get("transcript_vtt_file"),
+		"transcription_error": job.get("transcription_error"),
+		"transcription_started_at": job.get("transcription_started_at"),
+		"transcription_completed_at": job.get("transcription_completed_at"),
+		"transcription_cost_usd": flt(job.get("transcription_cost_usd")),
+		"karaoke_status": job.get("karaoke_status") or "Not Started",
+		"karaoke_template": job.get("karaoke_template") or settings.karaoke_default_template,
+		"karaoke_video_file": job.get("karaoke_video_file"),
+		"karaoke_subtitle_json_file": job.get("karaoke_subtitle_json_file"),
+		"karaoke_error": job.get("karaoke_error"),
+		"karaoke_started_at": job.get("karaoke_started_at"),
+		"karaoke_completed_at": job.get("karaoke_completed_at"),
+		"can_start_transcription": can_transcribe,
+		"transcription_blocked_reason": transcription_blocked_reason,
+		"can_start_karaoke": can_karaoke,
+		"karaoke_blocked_reason": karaoke_blocked_reason,
+		"has_transcript_json": bool(job.get("transcript_json_file")),
+		"has_transcript_srt": bool(job.get("transcript_srt_file")),
+		"has_transcript_vtt": bool(job.get("transcript_vtt_file")),
+		"has_karaoke_video": bool(job.get("karaoke_video_file")),
+		"is_transcription_active": (
+			job.get("transcription_status") in ("Queued", "Processing")
+			and not transcription_queue_is_stale(job)
+		),
+		"is_karaoke_active": (
+			job.get("karaoke_status") in ("Queued", "Rendering") and not karaoke_queue_is_stale(job)
+		),
+		"karaoke_default_template": settings.karaoke_default_template or "hype",
+		"default_transcription_language": settings.default_transcription_language,
 	}
 
 
@@ -420,6 +476,11 @@ def get_page_settings():
 		"credit_type": get_audio_credit_type() if is_credit_management_enabled() else None,
 		"accepted_file_types": "MP3, WAV, M4A, FLAC, OGG, AAC",
 		"is_system_manager": _is_system_manager(),
+		"openai_enabled": bool(cint(get_settings().openai_enabled)),
+		"karaoke_enabled": bool(cint(get_settings().karaoke_enabled)),
+		"karaoke_default_template": get_settings().karaoke_default_template or "hype",
+		"default_transcription_language": get_settings().default_transcription_language,
+		"transcription_max_file_size_mb": cint(get_settings().transcription_max_file_size_mb) or 25,
 	}
 
 
@@ -694,3 +755,133 @@ def create_job_zip(job_name: str):
 	job.save(ignore_permissions=True)
 	log_audit("Create ZIP", reference_doctype=job.doctype, reference_name=job.name, message="ZIP created.")
 	return {"zip_file": zip_url, "job_name": job.name}
+
+
+@frappe.whitelist()
+def start_transcription(job_name: str, source: str = "Vocal", language: str | None = None):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+	settings = get_settings()
+
+	from audio_stem.integrations.openai_transcription_client import is_openai_transcription_enabled
+	from audio_stem.utils.audit_log import log_audit
+	from audio_stem.utils.transcription_karaoke_controls import (
+		TRANSCRIPTION_ACTIVE_STATUSES,
+		can_start_transcription_source,
+		enqueue_transcription,
+		transcription_queue_is_stale,
+	)
+
+	if not is_openai_transcription_enabled():
+		frappe.throw(_("OpenAI transcription is disabled."), frappe.ValidationError)
+
+	api_key = (settings.get_password("openai_api_key", raise_exception=False) or "").strip()
+	if not api_key:
+		frappe.throw(
+			_("OpenAI API key is not configured in Audio Separation Settings."),
+			frappe.ValidationError,
+		)
+
+	if (job.transcription_status or "Not Started") in TRANSCRIPTION_ACTIVE_STATUSES:
+		if not transcription_queue_is_stale(job):
+			return {**_job_detail_payload(job), "already_active": True}
+
+	can_start, blocked_reason = can_start_transcription_source(job, source)
+	if not can_start:
+		frappe.throw(blocked_reason or _("Transcription cannot be started."), frappe.ValidationError)
+
+	from audio_stem.utils.abuse_protection import ensure_start_allowed
+
+	if not _is_system_manager(job.user):
+		ensure_start_allowed(job.user)
+
+	language = language or settings.default_transcription_language
+	enqueue_transcription(job, source=source, language=language)
+	log_audit(
+		"Start Transcription",
+		reference_doctype=job.doctype,
+		reference_name=job.name,
+		message=f"Transcription queued from {source}.",
+		metadata={"source": source, "language": language},
+	)
+	job.reload()
+	return {**_job_detail_payload(job), "already_active": False}
+
+
+@frappe.whitelist()
+def get_transcription_status(job_name: str):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+	return _transcription_karaoke_payload(job)
+
+
+@frappe.whitelist()
+def download_transcript_asset(job_name: str, asset_type: str):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+
+	from audio_stem.utils.audit_log import log_audit
+
+	asset_type = (asset_type or "").strip().lower()
+	field_map = {
+		"json": "transcript_json_file",
+		"srt": "transcript_srt_file",
+		"vtt": "transcript_vtt_file",
+	}
+	fieldname = field_map.get(asset_type)
+	if not fieldname or not job.get(fieldname):
+		frappe.throw(_("Transcript file is not available."), frappe.DoesNotExistError)
+
+	log_audit(
+		"Download Transcript",
+		reference_doctype=job.doctype,
+		reference_name=job.name,
+		message=f"Downloaded {asset_type.upper()} transcript.",
+	)
+	return {"file_url": job.get(fieldname), "asset_type": asset_type}
+
+
+@frappe.whitelist()
+def start_karaoke_render(job_name: str, template: str | None = None):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+	settings = get_settings()
+
+	from audio_stem.utils.audit_log import log_audit
+	from audio_stem.utils.transcription_karaoke_controls import (
+		KARAOKE_ACTIVE_STATUSES,
+		can_start_karaoke,
+		enqueue_karaoke,
+		is_karaoke_enabled,
+		karaoke_queue_is_stale,
+	)
+
+	if not is_karaoke_enabled():
+		frappe.throw(_("Karaoke rendering is disabled."), frappe.ValidationError)
+
+	if (job.karaoke_status or "Not Started") in KARAOKE_ACTIVE_STATUSES:
+		if not karaoke_queue_is_stale(job):
+			return {**_job_detail_payload(job), "already_active": True}
+
+	can_start, blocked_reason = can_start_karaoke(job)
+	if not can_start:
+		frappe.throw(blocked_reason or _("Karaoke rendering cannot be started."), frappe.ValidationError)
+
+	template = template or settings.karaoke_default_template or "hype"
+	enqueue_karaoke(job, template=template)
+	log_audit(
+		"Start Karaoke",
+		reference_doctype=job.doctype,
+		reference_name=job.name,
+		message=f"Karaoke render queued with template {template}.",
+		metadata={"template": template},
+	)
+	job.reload()
+	return {**_job_detail_payload(job), "already_active": False}
+
+
+@frappe.whitelist()
+def get_karaoke_status(job_name: str):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+	return _transcription_karaoke_payload(job)

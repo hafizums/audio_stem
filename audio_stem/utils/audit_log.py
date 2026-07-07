@@ -6,7 +6,7 @@ import json
 import frappe
 from frappe.utils import now_datetime
 
-SENSITIVE_MARKERS = ("api_key", "wavespeed", "traceback", "bearer ")
+SENSITIVE_MARKERS = ("api_key", "wavespeed", "openai", "traceback", "bearer ", "sk-")
 
 
 def log_audit(

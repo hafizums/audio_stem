@@ -230,6 +230,67 @@ def get_configuration_checklist_data() -> list[dict]:
 		)
 	)
 
+	if cint(settings.openai_enabled):
+		openai_key = (settings.get_password("openai_api_key", raise_exception=False) or "").strip()
+		if openai_key:
+			items.append(_item("openai_api_key", _("OpenAI API Key"), "ok", _("OpenAI API key is configured.")))
+		else:
+			items.append(_item("openai_api_key", _("OpenAI API Key"), "error", _("OpenAI API key is missing.")))
+		items.append(
+			_item(
+				"openai_enabled",
+				_("OpenAI Transcription"),
+				"ok",
+				_("OpenAI transcription is enabled (model: {0}).").format(settings.transcription_model or "whisper-1"),
+			)
+		)
+		items.append(
+			_item(
+				"word_timestamps",
+				_("Word Timestamps"),
+				"ok" if cint(settings.enable_word_timestamps) else "warning",
+				_("Word timestamps are enabled.") if cint(settings.enable_word_timestamps) else _("Word timestamps are disabled."),
+			)
+		)
+	else:
+		items.append(
+			_item("openai_enabled", _("OpenAI Transcription"), "warning", _("OpenAI transcription is disabled."))
+		)
+
+	if cint(settings.karaoke_enabled):
+		from audio_stem.utils.ffmpeg_media import is_ffmpeg_available
+
+		items.append(
+			_item(
+				"karaoke_enabled",
+				_("Karaoke Rendering"),
+				"ok",
+				_("Karaoke is enabled (template: {0}).").format(settings.karaoke_default_template or "hype"),
+			)
+		)
+		items.append(
+			_item(
+				"ffmpeg_available",
+				_("ffmpeg"),
+				"ok" if is_ffmpeg_available() else "error",
+				_("ffmpeg is available.") if is_ffmpeg_available() else _("ffmpeg is required for karaoke video generation."),
+			)
+		)
+		from audio_stem.utils.karaoke_subtitles import is_pycaps_available
+
+		items.append(
+			_item(
+				"pycaps_available",
+				_("PyCaps (pycaps-ai)"),
+				"ok" if is_pycaps_available() else "error",
+				_("PyCaps subtitle renderer is available.")
+				if is_pycaps_available()
+				else _("Install pycaps-ai (not the unrelated PyPI package pycaps) and run playwright install chromium."),
+			)
+		)
+	else:
+		items.append(_item("karaoke_enabled", _("Karaoke Rendering"), "warning", _("Karaoke rendering is disabled.")))
+
 	return items
 
 

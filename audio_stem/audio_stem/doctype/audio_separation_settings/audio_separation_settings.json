@@ -34,6 +34,23 @@
   "hourly_create_limit_per_user",
   "daily_failed_job_limit_per_user",
   "stuck_job_threshold_minutes",
+  "section_break_openai",
+  "openai_enabled",
+  "openai_api_key",
+  "transcription_model",
+  "transcription_max_file_size_mb",
+  "transcription_cost_per_minute_usd",
+  "default_transcription_language",
+  "enable_word_timestamps",
+  "charge_credits_for_transcription",
+  "section_break_karaoke",
+  "karaoke_enabled",
+  "karaoke_default_template",
+  "karaoke_output_width",
+  "karaoke_output_height",
+  "karaoke_background_color",
+  "karaoke_include_instrumental_audio",
+  "charge_credits_for_karaoke",
   "section_break_credits",
   "credit_management_enabled",
   "credit_type",
@@ -218,6 +235,108 @@
    "fieldtype": "Int",
    "label": "Stuck Job Threshold Minutes",
    "non_negative": 1
+  },
+  {
+   "fieldname": "section_break_openai",
+   "fieldtype": "Section Break",
+   "label": "OpenAI Transcription"
+  },
+  {
+   "default": "0",
+   "fieldname": "openai_enabled",
+   "fieldtype": "Check",
+   "label": "OpenAI Enabled"
+  },
+  {
+   "fieldname": "openai_api_key",
+   "fieldtype": "Password",
+   "label": "OpenAI API Key"
+  },
+  {
+   "default": "whisper-1",
+   "fieldname": "transcription_model",
+   "fieldtype": "Data",
+   "label": "Transcription Model"
+  },
+  {
+   "default": "25",
+   "fieldname": "transcription_max_file_size_mb",
+   "fieldtype": "Int",
+   "label": "Transcription Max File Size (MB)",
+   "non_negative": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "transcription_cost_per_minute_usd",
+   "fieldtype": "Currency",
+   "label": "Transcription Cost Per Minute (USD)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "default_transcription_language",
+   "fieldtype": "Data",
+   "label": "Default Transcription Language"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_word_timestamps",
+   "fieldtype": "Check",
+   "label": "Enable Word Timestamps"
+  },
+  {
+   "default": "0",
+   "fieldname": "charge_credits_for_transcription",
+   "fieldtype": "Check",
+   "label": "Charge Credits For Transcription"
+  },
+  {
+   "fieldname": "section_break_karaoke",
+   "fieldtype": "Section Break",
+   "label": "Karaoke"
+  },
+  {
+   "default": "0",
+   "fieldname": "karaoke_enabled",
+   "fieldtype": "Check",
+   "label": "Karaoke Enabled"
+  },
+  {
+   "default": "hype",
+   "fieldname": "karaoke_default_template",
+   "fieldtype": "Data",
+   "label": "Karaoke Default Template"
+  },
+  {
+   "default": "1080",
+   "fieldname": "karaoke_output_width",
+   "fieldtype": "Int",
+   "label": "Karaoke Output Width",
+   "non_negative": 1
+  },
+  {
+   "default": "1920",
+   "fieldname": "karaoke_output_height",
+   "fieldtype": "Int",
+   "label": "Karaoke Output Height",
+   "non_negative": 1
+  },
+  {
+   "default": "#111111",
+   "fieldname": "karaoke_background_color",
+   "fieldtype": "Data",
+   "label": "Karaoke Background Color"
+  },
+  {
+   "default": "1",
+   "fieldname": "karaoke_include_instrumental_audio",
+   "fieldtype": "Check",
+   "label": "Karaoke Include Instrumental Audio"
+  },
+  {
+   "default": "0",
+   "fieldname": "charge_credits_for_karaoke",
+   "fieldtype": "Check",
+   "label": "Charge Credits For Karaoke"
   },
   {
    "fieldname": "section_break_credits",

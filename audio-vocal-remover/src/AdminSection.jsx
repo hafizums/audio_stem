@@ -84,6 +84,8 @@ export default function AdminSection() {
 						<p>Completed (24h): {provider.completed_count}</p>
 						<p>Failed (24h): {provider.failed_count}</p>
 						{provider.success_rate != null && <p>Success rate: {provider.success_rate}</p>}
+						<p>Transcription completed (24h): {provider.transcription_completed_count}</p>
+						<p>Karaoke failed (24h): {provider.karaoke_failed_count}</p>
 					</div>
 				) : (
 					<p className="text-sm text-gray-500">Loading provider health...</p>

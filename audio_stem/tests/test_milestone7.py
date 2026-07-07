@@ -18,6 +18,7 @@ from audio_stem.api.separation import (
 	get_recent_jobs,
 	start_separation,
 )
+from audio_stem.tests.base import AudioStemTestCase
 from audio_stem.utils.audit_log import log_audit
 from audio_stem.utils.daily_limits import ensure_daily_limits_for_queue, get_user_daily_usage
 from audio_stem.utils.pilot_access import is_pilot_access_allowed
@@ -36,64 +37,10 @@ CLIENT = "audio_stem.integrations.credit_management_client"
 PILOT_ROLE = "Audio Stem Pilot"
 
 
-class TestAudioSeparationMilestone7(FrappeTestCase):
+class TestAudioSeparationMilestone7(AudioStemTestCase):
 	def setUp(self):
-		settings = frappe.get_single("Audio Separation Settings")
-		self._saved = {
-			"enabled": settings.enabled,
-			"wavespeed_api_key": settings.get_password("wavespeed_api_key", raise_exception=False),
-			"max_file_size_mb": settings.max_file_size_mb,
-			"max_audio_duration_seconds": settings.max_audio_duration_seconds,
-			"cost_per_second_usd": settings.cost_per_second_usd,
-			"store_outputs_locally": settings.store_outputs_locally,
-			"credit_management_enabled": settings.credit_management_enabled,
-			"credit_type": settings.credit_type,
-			"credit_owner_doctype": settings.credit_owner_doctype,
-			"pilot_mode_enabled": getattr(settings, "pilot_mode_enabled", 0),
-			"allowed_roles": getattr(settings, "allowed_roles", None),
-			"allowed_users": getattr(settings, "allowed_users", None),
-			"blocked_users": getattr(settings, "blocked_users", None),
-			"daily_job_limit_per_user": getattr(settings, "daily_job_limit_per_user", 0),
-			"daily_duration_limit_seconds_per_user": getattr(
-				settings, "daily_duration_limit_seconds_per_user", 0
-			),
-			"daily_cost_limit_usd_per_user": getattr(settings, "daily_cost_limit_usd_per_user", 0),
-			"hourly_create_limit_per_user": getattr(settings, "hourly_create_limit_per_user", 20),
-			"daily_failed_job_limit_per_user": getattr(settings, "daily_failed_job_limit_per_user", 10),
-			"stuck_job_threshold_minutes": getattr(settings, "stuck_job_threshold_minutes", 30),
-		}
-		settings.enabled = 1
-		settings.wavespeed_api_key = "test-api-key"
-		settings.max_file_size_mb = 50
-		settings.max_audio_duration_seconds = 600
-		settings.cost_per_second_usd = 0.001
-		settings.store_outputs_locally = 0
-		settings.credit_management_enabled = 0
-		settings.credit_type = "AUDIO_STEM"
-		settings.credit_owner_doctype = "User"
-		settings.pilot_mode_enabled = 0
-		settings.allowed_roles = None
-		settings.allowed_users = None
-		settings.blocked_users = None
-		settings.daily_job_limit_per_user = 0
-		settings.daily_duration_limit_seconds_per_user = 0
-		settings.daily_cost_limit_usd_per_user = 0
-		settings.hourly_create_limit_per_user = 0
-		settings.daily_failed_job_limit_per_user = 0
-		settings.stuck_job_threshold_minutes = 30
-		settings.save(ignore_permissions=True)
-		frappe.set_user("Administrator")
+		super().setUp()
 		self._ensure_role(PILOT_ROLE)
-
-	def tearDown(self):
-		settings = frappe.get_single("Audio Separation Settings")
-		for field, value in self._saved.items():
-			if field == "wavespeed_api_key":
-				settings.wavespeed_api_key = value or ""
-			else:
-				setattr(settings, field, value)
-		settings.save(ignore_permissions=True)
-		frappe.set_user("Administrator")
 
 	def _ensure_role(self, role_name: str):
 		if not frappe.db.exists("Role", role_name):

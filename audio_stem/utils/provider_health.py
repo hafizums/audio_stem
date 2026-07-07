@@ -5,18 +5,40 @@ import frappe
 from frappe.utils import add_to_date, cint, flt, now_datetime
 
 
+def _status_counts(jobs, field: str) -> dict:
+	counts = {"completed": 0, "failed": 0}
+	for row in jobs:
+		value = row.get(field) or "Not Started"
+		if value == "Completed":
+			counts["completed"] += 1
+		elif value == "Failed":
+			counts["failed"] += 1
+	return counts
+
+
 def get_provider_health_summary() -> dict:
 	since = add_to_date(now_datetime(), hours=-24)
 	jobs = frappe.get_all(
 		"Audio Separation Job",
 		filters={"modified": (">=", since)},
-		fields=["name", "status", "started_at", "completed_at", "duration_seconds"],
+		fields=[
+			"name",
+			"status",
+			"started_at",
+			"completed_at",
+			"duration_seconds",
+			"transcription_status",
+			"karaoke_status",
+		],
 		ignore_permissions=True,
 	)
 
 	completed = [row for row in jobs if row.status == "Completed"]
 	failed = [row for row in jobs if row.status == "Failed"]
 	terminal = completed + failed
+
+	transcription = _status_counts(jobs, "transcription_status")
+	karaoke = _status_counts(jobs, "karaoke_status")
 
 	if not terminal:
 		return {
@@ -27,7 +49,11 @@ def get_provider_health_summary() -> dict:
 			"average_processing_seconds": None,
 			"last_success_at": None,
 			"last_failure_at": None,
-			"message": "No completed or failed jobs in the last 24 hours.",
+			"message": "No completed or failed separation jobs in the last 24 hours.",
+			"transcription_completed_count": transcription["completed"],
+			"transcription_failed_count": transcription["failed"],
+			"karaoke_completed_count": karaoke["completed"],
+			"karaoke_failed_count": karaoke["failed"],
 		}
 
 	success_rate = flt(len(completed)) / flt(len(terminal))
@@ -44,10 +70,17 @@ def get_provider_health_summary() -> dict:
 	message = "Provider outcomes look healthy."
 	if success_rate < 0.5:
 		status = "error"
-		message = "High failure rate in the last 24 hours."
+		message = "High separation failure rate in the last 24 hours."
 	elif success_rate < 0.8 or len(failed) >= 3:
 		status = "warning"
-		message = "Elevated failure rate in the last 24 hours."
+		message = "Elevated separation failure rate in the last 24 hours."
+
+	if transcription["failed"] >= 3:
+		status = "warning" if status == "ok" else status
+		message = f"{message} Transcription failures: {transcription['failed']}."
+	if karaoke["failed"] >= 3:
+		status = "warning" if status == "ok" else status
+		message = f"{message} Karaoke render failures: {karaoke['failed']}."
 
 	return {
 		"status": status,
@@ -58,4 +91,8 @@ def get_provider_health_summary() -> dict:
 		"last_success_at": last_success,
 		"last_failure_at": last_failure,
 		"message": message,
+		"transcription_completed_count": transcription["completed"],
+		"transcription_failed_count": transcription["failed"],
+		"karaoke_completed_count": karaoke["completed"],
+		"karaoke_failed_count": karaoke["failed"],
 	}

@@ -19,6 +19,7 @@ from audio_stem.api.separation import (
 	start_separation,
 )
 from audio_stem.audio_stem.report.audio_stem_usage_summary.audio_stem_usage_summary import execute
+from audio_stem.tests.base import AudioStemTestCase
 from audio_stem.utils.cleanup import cleanup_old_audio_jobs
 
 CLIENT = "audio_stem.integrations.credit_management_client"
@@ -32,50 +33,7 @@ FORBIDDEN_CREDIT_PATTERNS = (
 )
 
 
-class TestAudioSeparationMilestone5(FrappeTestCase):
-	def setUp(self):
-		settings = frappe.get_single("Audio Separation Settings")
-		self._saved = {
-			"enabled": settings.enabled,
-			"wavespeed_api_key": settings.get_password("wavespeed_api_key", raise_exception=False),
-			"max_file_size_mb": settings.max_file_size_mb,
-			"max_audio_duration_seconds": settings.max_audio_duration_seconds,
-			"cost_per_second_usd": settings.cost_per_second_usd,
-			"store_outputs_locally": settings.store_outputs_locally,
-			"credit_management_enabled": settings.credit_management_enabled,
-			"credit_type": settings.credit_type,
-			"credit_owner_doctype": settings.credit_owner_doctype,
-			"cleanup_enabled": getattr(settings, "cleanup_enabled", 0),
-			"retention_days": getattr(settings, "retention_days", 7),
-			"delete_original_after_completion": getattr(settings, "delete_original_after_completion", 0),
-			"delete_outputs_after_retention": getattr(settings, "delete_outputs_after_retention", 0),
-		}
-		settings.enabled = 1
-		settings.wavespeed_api_key = "test-api-key"
-		settings.max_file_size_mb = 50
-		settings.max_audio_duration_seconds = 600
-		settings.cost_per_second_usd = 0.001
-		settings.store_outputs_locally = 0
-		settings.credit_management_enabled = 0
-		settings.credit_type = "AUDIO_STEM"
-		settings.credit_owner_doctype = "User"
-		settings.cleanup_enabled = 0
-		settings.retention_days = 7
-		settings.delete_original_after_completion = 0
-		settings.delete_outputs_after_retention = 0
-		settings.save(ignore_permissions=True)
-		frappe.set_user("Administrator")
-
-	def tearDown(self):
-		settings = frappe.get_single("Audio Separation Settings")
-		for field, value in self._saved.items():
-			if field == "wavespeed_api_key":
-				settings.wavespeed_api_key = value or ""
-			else:
-				setattr(settings, field, value)
-		settings.save(ignore_permissions=True)
-		frappe.set_user("Administrator")
-
+class TestAudioSeparationMilestone5(AudioStemTestCase):
 	def _create_file(self, content=b"audio"):
 		with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
 			tmp.write(content)

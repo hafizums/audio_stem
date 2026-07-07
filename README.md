@@ -252,6 +252,15 @@ bench restart
 
 ### Run tests
 
+Use a **dedicated test site** when possible. The test suite temporarily changes **Audio Separation Settings** on whichever site you target. Running against your main dev site (`jomveo`) can overwrite values such as the WaveSpeed API key, pilot allowlists, and limits.
+
+```bash
+# Recommended: separate site for tests
+bench new-site test.localhost --admin-password admin
+bench --site test.localhost install-app audio_stem
+bench --site test.localhost run-tests --app audio_stem
+```
+
 ```bash
 bench --site <your-site> run-tests --app audio_stem
 ```
@@ -447,7 +456,104 @@ bench --site <your-site> run-tests --app audio_stem
 | Too many creates blocked | Hourly abuse limit | `hourly_create_limit_per_user` |
 | Starts blocked after failures | Daily failed-job limit | `daily_failed_job_limit_per_user` |
 
+## Milestone 8
+
+OpenAI Whisper transcription and karaoke subtitle video generation (PyCaps + ffmpeg).
+
+### OpenAI Whisper setup
+
+| Field | Default | Purpose |
+| --- | --- | --- |
+| `openai_enabled` | 0 | Enable backend Whisper transcription |
+| `openai_api_key` | — | Password field; never exposed to browser |
+| `transcription_model` | `whisper-1` | OpenAI transcription model |
+| `transcription_max_file_size_mb` | 25 | Max upload size before ffmpeg compression |
+| `transcription_cost_per_minute_usd` | 0 | Estimated cost tracking only unless credits enabled |
+| `default_transcription_language` | — | Optional language hint |
+| `enable_word_timestamps` | 1 | Request word + segment timestamps |
+| `charge_credits_for_transcription` | 0 | Optional credit charge (uses credit client only) |
+
+### Karaoke / PyCaps
+
+| Field | Default | Purpose |
+| --- | --- | --- |
+| `karaoke_enabled` | 0 | Enable karaoke render pipeline |
+| `karaoke_default_template` | `hype` | PyCaps template name |
+| `karaoke_output_width` / `karaoke_output_height` | 1080 / 1920 | 9:16 background video |
+| `karaoke_background_color` | `#111111` | ffmpeg background color |
+| `karaoke_include_instrumental_audio` | 1 | Prefer instrumental audio in karaoke video |
+| `charge_credits_for_karaoke` | 0 | Optional credit charge (uses credit client only) |
+
+**System requirements:** `ffmpeg` for background video generation; `pycaps-ai` + Playwright Chromium for karaoke rendering (`pip install "pycaps-ai[base]"` then `playwright install chromium`). Do **not** install the unrelated PyPI package `pycaps` (Linux capabilities).
+
+### Transcription flow
+
+1. Complete vocal/instrumental separation.
+2. In job detail, choose source **Vocal** (default) or **Original**.
+3. `start_transcription` queues `process_transcription` on the long worker.
+4. Worker calls OpenAI Whisper (`verbose_json` + word timestamps when enabled).
+5. Saves transcript text, private JSON/SRT/VTT files on the job.
+
+### Karaoke flow
+
+1. Requires completed transcription.
+2. `start_karaoke_render` queues `process_karaoke_render`.
+3. Worker builds karaoke word JSON, creates a simple ffmpeg background video (if needed), renders with PyCaps.
+4. Attaches private karaoke MP4 to the job. Failed renders do not overwrite an existing karaoke video.
+
+### APIs
+
+- `audio_stem.api.separation.start_transcription(job_name, source="Vocal", language=None)`
+- `audio_stem.api.separation.get_transcription_status(job_name)`
+- `audio_stem.api.separation.download_transcript_asset(job_name, asset_type)` — `json`, `srt`, `vtt`
+- `audio_stem.api.separation.start_karaoke_render(job_name, template=None)`
+- `audio_stem.api.separation.get_karaoke_status(job_name)`
+
+### Manual test (Milestone 8)
+
+```bash
+cd /path/to/frappe-bench
+bench --site <your-site> migrate
+cd apps/audio_stem && yarn build
+bench build --app audio_stem
+bench --site <your-site> clear-cache
+bench restart
+bench --site <your-site> run-tests --app audio_stem
+```
+
+1. Configure OpenAI API key and enable OpenAI transcription.
+2. Complete one vocal separation job.
+3. Start transcription from **Vocal** source.
+4. Confirm transcript preview and download JSON/SRT/VTT.
+5. Enable karaoke and start render.
+6. Confirm karaoke video preview/download.
+7. Test invalid OpenAI key shows a safe error.
+8. Test mobile layout.
+9. Run the full test suite.
+
+### Troubleshooting (Milestone 8)
+
+| Symptom | Likely cause | What to check |
+| --- | --- | --- |
+| Transcription disabled | `openai_enabled` off | Audio Separation Settings |
+| Missing API key error | Key not saved | OpenAI API key field; checklist |
+| Vocal source blocked | Separation not completed | Job status + vocal output |
+| File too large | Over 25 MB default | `transcription_max_file_size_mb`; ffmpeg compression |
+| Karaoke disabled | `karaoke_enabled` off | Settings + SPA section |
+| Karaoke needs transcription | Transcription not completed | `transcription_status` |
+| ffmpeg missing | Not on PATH | Install ffmpeg; admin checklist |
+| PyCaps render failed | Template/render error | `karaoke_error`; Error Log (server-side only) |
+
 ### Run tests
+
+Use a **dedicated test site** when possible. The test suite temporarily changes **Audio Separation Settings** on whichever site you target. Running against your main dev site (`jomveo`) can overwrite values such as the WaveSpeed API key, pilot allowlists, and limits.
+
+```bash
+# Recommended: separate site for tests
+bench new-site test.localhost --admin-password admin
+bench --site test.localhost install-app audio_stem
+bench --site test.localhost run-tests --app audio_stem
+```
 
 ```bash
 bench --site <your-site> run-tests --app audio_stem

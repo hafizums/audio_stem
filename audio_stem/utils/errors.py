@@ -8,6 +8,8 @@ from frappe import _
 _SENSITIVE_PATTERNS = (
 	re.compile(r"api[_ -]?key", re.IGNORECASE),
 	re.compile(r"WAVESPEED_API_KEY", re.IGNORECASE),
+	re.compile(r"OPENAI_API_KEY", re.IGNORECASE),
+	re.compile(r"sk-[A-Za-z0-9]{10,}", re.IGNORECASE),
 	re.compile(r"Bearer\s+\S+", re.IGNORECASE),
 	re.compile(r"Traceback \(most recent call last\):", re.IGNORECASE),
 )

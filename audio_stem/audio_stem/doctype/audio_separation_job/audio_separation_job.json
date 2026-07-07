@@ -36,6 +36,27 @@
   "cancelled_at",
   "cancelled_by",
   "cancel_reason",
+  "section_break_transcription",
+  "transcription_status",
+  "transcription_source",
+  "transcription_model",
+  "transcription_language",
+  "transcript_text",
+  "transcript_json_file",
+  "transcript_srt_file",
+  "transcript_vtt_file",
+  "transcription_error",
+  "transcription_started_at",
+  "transcription_completed_at",
+  "transcription_cost_usd",
+  "section_break_karaoke",
+  "karaoke_status",
+  "karaoke_template",
+  "karaoke_video_file",
+  "karaoke_subtitle_json_file",
+  "karaoke_error",
+  "karaoke_started_at",
+  "karaoke_completed_at",
   "started_at",
   "completed_at",
   "zip_file"
@@ -226,6 +247,135 @@
    "fieldname": "cancel_reason",
    "fieldtype": "Small Text",
    "label": "Cancel Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_transcription",
+   "fieldtype": "Section Break",
+   "label": "Transcription"
+  },
+  {
+   "default": "Not Started",
+   "fieldname": "transcription_status",
+   "fieldtype": "Select",
+   "label": "Transcription Status",
+   "options": "Not Started\nQueued\nProcessing\nCompleted\nFailed\nCancelled",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcription_source",
+   "fieldtype": "Select",
+   "label": "Transcription Source",
+   "options": "Vocal\nOriginal",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcription_model",
+   "fieldtype": "Data",
+   "label": "Transcription Model",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcription_language",
+   "fieldtype": "Data",
+   "label": "Transcription Language",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcript_text",
+   "fieldtype": "Long Text",
+   "label": "Transcript Text",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcript_json_file",
+   "fieldtype": "Attach",
+   "label": "Transcript JSON File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcript_srt_file",
+   "fieldtype": "Attach",
+   "label": "Transcript SRT File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcript_vtt_file",
+   "fieldtype": "Attach",
+   "label": "Transcript VTT File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcription_error",
+   "fieldtype": "Small Text",
+   "label": "Transcription Error",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcription_started_at",
+   "fieldtype": "Datetime",
+   "label": "Transcription Started At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcription_completed_at",
+   "fieldtype": "Datetime",
+   "label": "Transcription Completed At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcription_cost_usd",
+   "fieldtype": "Currency",
+   "label": "Transcription Cost (USD)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_karaoke",
+   "fieldtype": "Section Break",
+   "label": "Karaoke"
+  },
+  {
+   "default": "Not Started",
+   "fieldname": "karaoke_status",
+   "fieldtype": "Select",
+   "label": "Karaoke Status",
+   "options": "Not Started\nQueued\nRendering\nCompleted\nFailed\nCancelled",
+   "read_only": 1
+  },
+  {
+   "fieldname": "karaoke_template",
+   "fieldtype": "Data",
+   "label": "Karaoke Template",
+   "read_only": 1
+  },
+  {
+   "fieldname": "karaoke_video_file",
+   "fieldtype": "Attach",
+   "label": "Karaoke Video File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "karaoke_subtitle_json_file",
+   "fieldtype": "Attach",
+   "label": "Karaoke Subtitle JSON File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "karaoke_error",
+   "fieldtype": "Small Text",
+   "label": "Karaoke Error",
+   "read_only": 1
+  },
+  {
+   "fieldname": "karaoke_started_at",
+   "fieldtype": "Datetime",
+   "label": "Karaoke Started At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "karaoke_completed_at",
+   "fieldtype": "Datetime",
+   "label": "Karaoke Completed At",
    "read_only": 1
   },
   {

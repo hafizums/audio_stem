@@ -12,6 +12,9 @@ dependencies = [
     "wavespeed>=1.0.9",
     "mutagen>=1.47.0",
     "requests>=2.31.0",
+    "openai>=1.0.0",
+    "pycaps-ai>=0.2.1",
+    "playwright>=1.40",
 ]
 
 [build-system]

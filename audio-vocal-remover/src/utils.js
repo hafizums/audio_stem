@@ -6,9 +6,11 @@ const STATUS_BADGE_CLASSES = {
 	Queued: "bg-amber-100 text-amber-800",
 	Uploading: "bg-blue-100 text-blue-800",
 	Processing: "bg-indigo-100 text-indigo-800",
+	Rendering: "bg-purple-100 text-purple-800",
 	Completed: "bg-green-100 text-green-800",
 	Failed: "bg-red-100 text-red-800",
 	Cancelled: "bg-gray-200 text-gray-700",
+	"Not Started": "bg-gray-100 text-gray-700",
 };
 
 export function formatCost(value, currency = "MYR") {

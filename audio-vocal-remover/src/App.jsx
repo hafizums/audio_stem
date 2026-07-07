@@ -127,6 +127,8 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 	const [retrying, setRetrying] = useState(false);
 	const [zipping, setZipping] = useState(false);
 	const [cancelling, setCancelling] = useState(false);
+	const [transcribing, setTranscribing] = useState(false);
+	const [karaokeRendering, setKaraokeRendering] = useState(false);
 	const [uploading, setUploading] = useState(false);
 	const [error, setError] = useState(null);
 	const pollRef = useRef(null);
@@ -163,6 +165,15 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 		"audio_stem.api.separation.get_job_detail"
 	);
 	const { call: cancelJob } = useFrappePostCall("audio_stem.api.separation.cancel_job");
+	const { call: startTranscription } = useFrappePostCall(
+		"audio_stem.api.separation.start_transcription"
+	);
+	const { call: startKaraokeRender } = useFrappePostCall(
+		"audio_stem.api.separation.start_karaoke_render"
+	);
+	const { call: downloadTranscriptAsset } = useFrappePostCall(
+		"audio_stem.api.separation.download_transcript_asset"
+	);
 
 	const displayCurrency = job?.display_currency || settings?.display_currency || "MYR";
 	const costPerSecond = settings?.cost_per_second_usd || 0;
@@ -193,10 +204,18 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 		if (!jobName) return;
 		const nextJob = unwrapFrappeMessage(await getJobDetail({ job_name: jobName }));
 		setJob(nextJob);
-		if (!ACTIVE_STATUSES.includes(nextJob?.status)) {
+		const shouldPoll =
+			ACTIVE_STATUSES.includes(nextJob?.status) ||
+			nextJob?.is_transcription_active ||
+			nextJob?.is_karaoke_active;
+		if (!shouldPoll) {
 			stopPolling();
 		}
-		if (TERMINAL_STATUSES.includes(nextJob?.status)) {
+		if (
+			TERMINAL_STATUSES.includes(nextJob?.status) &&
+			!nextJob?.is_transcription_active &&
+			!nextJob?.is_karaoke_active
+		) {
 			refreshRecent();
 			refreshCredit();
 			refreshSettings();
@@ -210,13 +229,16 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 	}, [fetchJobDetail, stopPolling]);
 
 	useEffect(() => {
-		if (job && ACTIVE_STATUSES.includes(job.status)) {
+		if (
+			job &&
+			(ACTIVE_STATUSES.includes(job.status) || job.is_transcription_active || job.is_karaoke_active)
+		) {
 			startPolling();
 		} else {
 			stopPolling();
 		}
 		return () => stopPolling();
-	}, [job?.status, jobName, startPolling, stopPolling]);
+	}, [job?.status, job?.is_transcription_active, job?.is_karaoke_active, jobName, startPolling, stopPolling]);
 
 	const handleFileChange = async (event) => {
 		const file = event.target.files?.[0];
@@ -313,6 +335,56 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 			setError(parseFrappeError(err) || err.message || "Failed to cancel job");
 		} finally {
 			setCancelling(false);
+		}
+	};
+
+	const handleTranscription = async (name, source, language) => {
+		if (transcribing) return;
+		setTranscribing(true);
+		setError(null);
+		try {
+			const result = unwrapFrappeMessage(
+				await startTranscription({ job_name: name, source, language: language || undefined })
+			);
+			setJobName(name);
+			setJob(result);
+			await fetchJobDetail();
+		} catch (err) {
+			setError(parseFrappeError(err) || err.message || "Failed to start transcription");
+		} finally {
+			setTranscribing(false);
+		}
+	};
+
+	const handleKaraoke = async (name, template) => {
+		if (karaokeRendering) return;
+		setKaraokeRendering(true);
+		setError(null);
+		try {
+			const result = unwrapFrappeMessage(
+				await startKaraokeRender({ job_name: name, template: template || undefined })
+			);
+			setJobName(name);
+			setJob(result);
+			await fetchJobDetail();
+		} catch (err) {
+			setError(parseFrappeError(err) || err.message || "Failed to start karaoke render");
+		} finally {
+			setKaraokeRendering(false);
+		}
+	};
+
+	const handleDownloadTranscript = async (name, assetType) => {
+		setError(null);
+		try {
+			const result = unwrapFrappeMessage(
+				await downloadTranscriptAsset({ job_name: name, asset_type: assetType })
+			);
+			if (result?.file_url) {
+				window.open(result.file_url, "_blank", "noopener,noreferrer");
+			}
+		} catch (err) {
+			setError(parseFrappeError(err) || err.message || "Failed to download transcript");
 		}
 	};
 
@@ -481,9 +553,14 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 						onRetry={handleRetry}
 						onZip={handleZip}
 						onCancel={handleCancel}
+						onTranscription={handleTranscription}
+						onKaraoke={handleKaraoke}
+						onDownloadTranscript={handleDownloadTranscript}
 						retrying={retrying}
 						zipping={zipping}
 						cancelling={cancelling}
+						transcribing={transcribing}
+						karaokeRendering={karaokeRendering}
 					/>
 				</div>
 

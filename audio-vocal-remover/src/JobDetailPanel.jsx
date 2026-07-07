@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
 	ACTIVE_STATUSES,
 	formatCost,
@@ -58,9 +59,14 @@ export default function JobDetailPanel({
 	onRetry,
 	onZip,
 	onCancel,
+	onTranscription,
+	onKaraoke,
+	onDownloadTranscript,
 	retrying,
 	zipping,
 	cancelling,
+	transcribing,
+	karaokeRendering,
 }) {
 	if (!job) {
 		return (
@@ -75,6 +81,29 @@ export default function JobDetailPanel({
 	const vocalSrc = job.vocal_output_url || job.vocal_file;
 	const instrumentalSrc = job.instrumental_output_url || job.instrumental_file;
 	const isProgress = ACTIVE_STATUSES.includes(job.status);
+	const [transcriptionSource, setTranscriptionSource] = useState("Vocal");
+	const [transcriptionLanguage, setTranscriptionLanguage] = useState(
+		job.default_transcription_language || settings?.default_transcription_language || ""
+	);
+	const [karaokeTemplate, setKaraokeTemplate] = useState(
+		job.karaoke_template || job.karaoke_default_template || settings?.karaoke_default_template || "hype"
+	);
+
+	const vocalTranscriptionBlocked =
+		job.is_active ||
+		job.status !== "Completed" ||
+		!job.has_vocal;
+	const transcriptionDisabled =
+		!job.openai_enabled ||
+		!job.can_start_transcription ||
+		transcribing ||
+		job.is_transcription_active ||
+		(transcriptionSource === "Vocal" && vocalTranscriptionBlocked);
+	const karaokeDisabled =
+		!job.karaoke_enabled ||
+		!job.can_start_karaoke ||
+		karaokeRendering ||
+		job.is_karaoke_active;
 
 	return (
 		<div className="space-y-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
@@ -178,6 +207,159 @@ export default function JobDetailPanel({
 					>
 						{zipping ? "Creating ZIP..." : "Download ZIP"}
 					</button>
+				)}
+			</div>
+
+			<div className="space-y-3 border-t border-gray-100 pt-4">
+				<h3 className="text-sm font-semibold text-gray-900">Transcription</h3>
+				{!job.openai_enabled && !settings?.openai_enabled ? (
+					<p className="text-sm text-gray-500">OpenAI transcription is disabled.</p>
+				) : (
+					<div className="space-y-3">
+						<div className="flex flex-wrap items-center gap-2">
+							<StatusBadge status={job.transcription_status || "Not Started"} />
+							{job.transcription_cost_usd > 0 && (
+								<span className="text-xs text-gray-500">
+									Cost: {formatCost(job.transcription_cost_usd, displayCurrency)}
+								</span>
+							)}
+						</div>
+						<div className="grid gap-2 sm:grid-cols-2">
+							<label className="text-sm text-gray-700">
+								Source
+								<select
+									className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+									value={transcriptionSource}
+									onChange={(e) => setTranscriptionSource(e.target.value)}
+									disabled={transcribing || job.is_transcription_active}
+								>
+									<option value="Vocal">Vocal</option>
+									<option value="Original">Original</option>
+								</select>
+							</label>
+							<label className="text-sm text-gray-700">
+								Language (optional)
+								<input
+									type="text"
+									className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+									value={transcriptionLanguage}
+									onChange={(e) => setTranscriptionLanguage(e.target.value)}
+									placeholder="Auto-detect"
+									disabled={transcribing || job.is_transcription_active}
+								/>
+							</label>
+						</div>
+						<button
+							type="button"
+							disabled={transcriptionDisabled}
+							onClick={() =>
+								onTranscription(job.name, transcriptionSource, transcriptionLanguage)
+							}
+							className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							{transcribing || job.is_transcription_active
+								? "Transcribing..."
+								: "Start Transcription"}
+						</button>
+						{job.transcription_blocked_reason && transcriptionDisabled && (
+							<p className="text-sm text-gray-600">{job.transcription_blocked_reason}</p>
+						)}
+						{job.transcription_error && (
+							<p className="text-sm text-red-600">{job.transcription_error}</p>
+						)}
+						{job.transcript_text && (
+							<div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-800">
+								<p className="mb-1 font-medium text-gray-700">Transcript preview</p>
+								<p className="max-h-40 overflow-y-auto whitespace-pre-wrap">{job.transcript_text}</p>
+							</div>
+						)}
+						{(job.has_transcript_json || job.has_transcript_srt || job.has_transcript_vtt) && (
+							<div className="flex flex-wrap gap-2">
+								{job.has_transcript_json && (
+									<button
+										type="button"
+										className="text-sm text-blue-600 hover:underline"
+										onClick={() => onDownloadTranscript(job.name, "json")}
+									>
+										Download JSON
+									</button>
+								)}
+								{job.has_transcript_srt && (
+									<button
+										type="button"
+										className="text-sm text-blue-600 hover:underline"
+										onClick={() => onDownloadTranscript(job.name, "srt")}
+									>
+										Download SRT
+									</button>
+								)}
+								{job.has_transcript_vtt && (
+									<button
+										type="button"
+										className="text-sm text-blue-600 hover:underline"
+										onClick={() => onDownloadTranscript(job.name, "vtt")}
+									>
+										Download VTT
+									</button>
+								)}
+							</div>
+						)}
+					</div>
+				)}
+			</div>
+
+			<div className="space-y-3 border-t border-gray-100 pt-4">
+				<h3 className="text-sm font-semibold text-gray-900">Karaoke Video</h3>
+				{!job.karaoke_enabled && !settings?.karaoke_enabled ? (
+					<p className="text-sm text-gray-500">Karaoke rendering is disabled.</p>
+				) : (
+					<div className="space-y-3">
+						<div className="flex flex-wrap items-center gap-2">
+							<StatusBadge status={job.karaoke_status || "Not Started"} />
+						</div>
+						<label className="block text-sm text-gray-700">
+							Template
+							<input
+								type="text"
+								className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm sm:max-w-xs"
+								value={karaokeTemplate}
+								onChange={(e) => setKaraokeTemplate(e.target.value)}
+								disabled={karaokeRendering || job.is_karaoke_active}
+							/>
+						</label>
+						<button
+							type="button"
+							disabled={karaokeDisabled}
+							onClick={() => onKaraoke(job.name, karaokeTemplate)}
+							className="rounded-md bg-purple-600 px-3 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							{karaokeRendering || job.is_karaoke_active
+								? "Rendering..."
+								: "Start Karaoke Render"}
+						</button>
+						{job.karaoke_blocked_reason && karaokeDisabled && (
+							<p className="text-sm text-gray-600">{job.karaoke_blocked_reason}</p>
+						)}
+						{job.karaoke_error && <p className="text-sm text-red-600">{job.karaoke_error}</p>}
+						{job.karaoke_video_file && (
+							<div>
+								<p className="mb-2 text-sm font-medium text-gray-700">Karaoke preview</p>
+								<video
+									controls
+									preload="none"
+									src={job.karaoke_video_file}
+									className="w-full max-w-full rounded-md"
+								/>
+								<a
+									href={job.karaoke_video_file}
+									className="mt-2 inline-block text-sm text-blue-600 hover:underline"
+									download
+								>
+									Download karaoke video
+								</a>
+							</div>
+						)}
+					</div>
 				)}
 			</div>
 

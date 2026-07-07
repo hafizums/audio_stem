@@ -9,43 +9,13 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from audio_stem.api.separation import create_job_from_file, start_separation
+from audio_stem.tests.base import AudioStemTestCase
 from audio_stem.utils.errors import safe_error_message
 from audio_stem.utils.limits import calculate_provider_cost
 from audio_stem.workers.separation_worker import process_audio_separation
 
 
-class TestAudioSeparationMilestone3(FrappeTestCase):
-	def setUp(self):
-		settings = frappe.get_single("Audio Separation Settings")
-		self._saved = {
-			"enabled": settings.enabled,
-			"wavespeed_api_key": settings.get_password("wavespeed_api_key", raise_exception=False),
-			"max_file_size_mb": settings.max_file_size_mb,
-			"max_audio_duration_seconds": settings.max_audio_duration_seconds,
-			"cost_per_second_usd": settings.cost_per_second_usd,
-			"store_outputs_locally": settings.store_outputs_locally,
-			"credit_management_enabled": settings.credit_management_enabled,
-		}
-		settings.enabled = 1
-		settings.wavespeed_api_key = "test-api-key"
-		settings.max_file_size_mb = 50
-		settings.max_audio_duration_seconds = 600
-		settings.cost_per_second_usd = 0.001
-		settings.store_outputs_locally = 0
-		settings.credit_management_enabled = 0
-		settings.save(ignore_permissions=True)
-		frappe.set_user("Administrator")
-
-	def tearDown(self):
-		settings = frappe.get_single("Audio Separation Settings")
-		for field, value in self._saved.items():
-			if field == "wavespeed_api_key":
-				settings.wavespeed_api_key = value or ""
-			else:
-				setattr(settings, field, value)
-		settings.save(ignore_permissions=True)
-		frappe.set_user("Administrator")
-
+class TestAudioSeparationMilestone3(AudioStemTestCase):
 	def _create_file(self, content: bytes, suffix: str = ".mp3"):
 		with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
 			tmp.write(content)
