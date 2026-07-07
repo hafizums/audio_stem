@@ -3,12 +3,18 @@
 
 import os
 import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from audio_stem.api.separation import get_my_credit_balance, start_separation
+from audio_stem.integrations.credit_management_client import (
+	consume_job_reservation,
+	release_job_reservation,
+	reserve_job_credits,
+)
 from audio_stem.integrations.wavespeed_client import SeparationResult
 from audio_stem.utils.errors import safe_error_message
 from audio_stem.utils.limits import calculate_provider_cost
@@ -16,6 +22,14 @@ from audio_stem.workers.separation_worker import process_audio_separation
 
 CREDIT_API = "credit_management.api"
 CLIENT = "audio_stem.integrations.credit_management_client"
+APP_ROOT = Path(__file__).resolve().parents[1]
+FORBIDDEN_CREDIT_PATTERNS = (
+	"Credit Account",
+	"Credit Ledger Entry",
+	"Credit Ledger",
+	"tabCredit Account",
+	"tabCredit Ledger Entry",
+)
 
 
 class TestAudioSeparationMilestone4(FrappeTestCase):
@@ -292,6 +306,7 @@ class TestAudioSeparationMilestone4(FrappeTestCase):
 
 		job.reload()
 		self.assertEqual(job.status, "Failed")
+		self.assertEqual(job.credit_status, "Failed")
 		self.assertNotIn("secret", job.credit_error or "")
 		self.assertNotIn("api_key", (job.credit_error or "").lower())
 		self.assertEqual(
@@ -328,3 +343,135 @@ class TestAudioSeparationMilestone4(FrappeTestCase):
 		self.assertTrue(result.get("enabled"))
 		self.assertEqual(result.get("credit_type"), "AUDIO_STEM")
 		self.assertEqual(result.get("available_balance"), 42)
+
+	def test_audio_stem_does_not_reference_credit_ledger_doctypes(self):
+		python_files = [
+			path
+			for path in APP_ROOT.rglob("*.py")
+			if "node_modules" not in path.parts and path.name != "test_milestone4.py"
+		]
+		for path in python_files:
+			content = path.read_text(encoding="utf-8")
+			for pattern in FORBIDDEN_CREDIT_PATTERNS:
+				self.assertNotIn(
+					pattern,
+					content,
+					msg=f"Forbidden credit reference {pattern!r} found in {path.relative_to(APP_ROOT)}",
+				)
+
+	@patch(f"{CLIENT}.credit_management_available", return_value=True)
+	@patch(f"{CREDIT_API}.reserve_credits")
+	@patch(f"{CREDIT_API}.get_balance")
+	def test_reserve_uses_stable_idempotency_key(self, get_balance_mock, reserve_mock, _available_mock):
+		self._enable_credit_management()
+		job = self._create_draft_job(duration_seconds=30)
+		expected_cost = calculate_provider_cost(30)
+		get_balance_mock.return_value = self._mock_balance(available_balance=expected_cost + 10)
+		reserve_mock.return_value = self._mock_reserve(expected_cost)
+
+		with patch("audio_stem.api.separation.frappe.enqueue"):
+			start_separation(job.name)
+
+		_, kwargs = reserve_mock.call_args
+		self.assertEqual(kwargs["idempotency_key"], f"audio_stem:{job.name}:reserve")
+		self.assertEqual(kwargs["source_app"], "audio_stem")
+
+	@patch(f"{CLIENT}.credit_management_available", return_value=True)
+	@patch(f"{CREDIT_API}.consume_reserved_credits")
+	def test_consume_uses_stable_idempotency_key(self, consume_mock, _available_mock):
+		job = self._create_draft_job(duration_seconds=30)
+		job.credit_reservation = "RES-TEST-001"
+		job.credit_status = "Reserved"
+		job.provider_cost_usd = calculate_provider_cost(30)
+		consume_mock.return_value = {"consumed_amount": job.provider_cost_usd}
+
+		consume_job_reservation(job)
+
+		_, kwargs = consume_mock.call_args
+		self.assertEqual(kwargs["idempotency_key"], f"audio_stem:{job.name}:consume")
+		self.assertEqual(kwargs["source_app"], "audio_stem")
+
+	@patch(f"{CLIENT}.credit_management_available", return_value=True)
+	@patch(f"{CREDIT_API}.release_reservation")
+	def test_release_uses_stable_idempotency_key(self, release_mock, _available_mock):
+		job = self._create_draft_job(duration_seconds=30)
+		job.credit_reservation = "RES-TEST-001"
+		job.credit_status = "Reserved"
+		release_mock.return_value = {"status": "Released"}
+
+		release_job_reservation(job, reason="test")
+
+		_, kwargs = release_mock.call_args
+		self.assertEqual(kwargs["idempotency_key"], f"audio_stem:{job.name}:release")
+
+	@patch(f"{CLIENT}.credit_management_available", return_value=True)
+	@patch(f"{CREDIT_API}.consume_reserved_credits")
+	def test_consume_is_idempotent_when_already_consumed(self, consume_mock, _available_mock):
+		job = self._create_draft_job(duration_seconds=30)
+		job.credit_reservation = "RES-TEST-001"
+		job.credit_status = "Consumed"
+		job.consumed_amount = 0.03
+
+		result = consume_job_reservation(job)
+
+		consume_mock.assert_not_called()
+		self.assertTrue(result.get("idempotent_replay"))
+
+	@patch(f"{CLIENT}.credit_management_available", return_value=True)
+	@patch(f"{CREDIT_API}.release_reservation")
+	def test_release_is_idempotent_when_already_released(self, release_mock, _available_mock):
+		job = self._create_draft_job(duration_seconds=30)
+		job.credit_reservation = "RES-TEST-001"
+		job.credit_status = "Released"
+
+		result = release_job_reservation(job, reason="test")
+
+		release_mock.assert_not_called()
+		self.assertTrue(result.get("idempotent_replay"))
+
+	@patch(f"{CLIENT}.credit_management_available", return_value=True)
+	@patch(f"{CREDIT_API}.reserve_credits")
+	@patch(f"{CREDIT_API}.get_balance")
+	def test_draft_to_queued_sets_credit_status_reserved(
+		self, get_balance_mock, reserve_mock, _available_mock
+	):
+		self._enable_credit_management()
+		job = self._create_draft_job(duration_seconds=30)
+		expected_cost = calculate_provider_cost(30)
+		get_balance_mock.return_value = self._mock_balance(available_balance=expected_cost + 10)
+		reserve_mock.return_value = self._mock_reserve(expected_cost)
+
+		self.assertEqual(job.status, "Draft")
+		job.credit_status = "Pending"
+		job.save(ignore_permissions=True)
+
+		with patch("audio_stem.api.separation.frappe.enqueue"):
+			start_separation(job.name)
+
+		job.reload()
+		self.assertEqual(job.status, "Queued")
+		self.assertEqual(job.credit_status, "Reserved")
+
+	@patch(f"{CLIENT}.credit_management_available", return_value=True)
+	@patch(f"{CREDIT_API}.release_reservation")
+	@patch(f"{CREDIT_API}.reserve_credits")
+	@patch(f"{CREDIT_API}.get_balance")
+	def test_enqueue_failure_releases_credits_and_returns_job_to_draft(
+		self, get_balance_mock, reserve_mock, release_mock, _available_mock
+	):
+		self._enable_credit_management()
+		job = self._create_draft_job(duration_seconds=30)
+		expected_cost = calculate_provider_cost(30)
+		get_balance_mock.return_value = self._mock_balance(available_balance=expected_cost + 10)
+		reserve_mock.return_value = self._mock_reserve(expected_cost)
+		release_mock.return_value = {"status": "Released"}
+
+		with patch("audio_stem.api.separation.frappe.enqueue", side_effect=RuntimeError("queue down")):
+			with self.assertRaises(RuntimeError):
+				start_separation(job.name)
+
+		job.reload()
+		self.assertEqual(job.status, "Draft")
+		self.assertEqual(job.credit_status, "Released")
+		release_mock.assert_called_once()
+		reserve_mock.assert_called_once()

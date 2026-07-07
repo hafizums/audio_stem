@@ -103,6 +103,13 @@ def reserve_job_credits(job) -> dict:
 
 def consume_job_reservation(job) -> dict:
 	_require_credit_api()
+	if job.credit_status == "Consumed":
+		return {
+			"consumed_amount": flt(job.consumed_amount),
+			"status": "Consumed",
+			"idempotent_replay": True,
+		}
+
 	import credit_management.api as credit_api
 
 	if not job.credit_reservation:
@@ -125,10 +132,14 @@ def consume_job_reservation(job) -> dict:
 
 def release_job_reservation(job, reason: str | None = None) -> dict:
 	_require_credit_api()
-	import credit_management.api as credit_api
 
 	if not job.credit_reservation:
 		return {"status": "skipped"}
+
+	if job.credit_status == "Released":
+		return {"status": "Released", "idempotent_replay": True}
+
+	import credit_management.api as credit_api
 
 	result = credit_api.release_reservation(
 		reservation_name=job.credit_reservation,

@@ -66,6 +66,7 @@ Cost-control, validation, retention, and safer processing:
 cd /path/to/frappe-bench
 bench --site <your-site> migrate
 bench --site <your-site> clear-cache
+cd apps/audio_stem && yarn build
 bench build --app audio_stem
 bench restart
 ```
@@ -91,14 +92,33 @@ Credit integration with the separate `credit_management` app:
 - Optional credit reservation before queueing, consume on success, release on failure
 - Integration settings on **Audio Separation Settings**
 - Credit fields on **Audio Separation Job**
-- Vocal remover page balance display and insufficient-credit blocking
+- Vocal remover page at `/audio-vocal-remover` shows balance and blocks start when credits are insufficient
 - All balance changes go through `credit_management.api` only (never mutate ledger rows from `audio_stem`)
+- Lazy imports of `credit_management.api` inside integration functions so `audio_stem` still loads when credits are disabled
+- Stable idempotency keys: `audio_stem:{job}:reserve|consume|release`
 
 **Warning:** Do not insert or update `Credit Account` or `Credit Ledger Entry` directly from `audio_stem`. Use only:
 
 ```python
-import credit_management.api as credit_api
+def some_function():
+    import credit_management.api as credit_api
+    credit_api.get_balance(...)
+    credit_api.reserve_credits(...)
+    credit_api.consume_reserved_credits(...)
+    credit_api.release_reservation(...)
 ```
+
+### Credit status flow
+
+| Job stage | Expected `credit_status` |
+| --- | --- |
+| Draft job created (credits on) | `Pending` |
+| Start queued | `Reserved` |
+| Worker completed | `Consumed` |
+| Worker failed (provider error) | `Released` |
+| Worker completed but consume API failed | `Failed` (`credit_error` set, outputs kept) |
+| Release API failed after provider failure | `Failed` (`credit_error` set) |
+| Credits disabled | `Not Required` |
 
 ### Required dependency
 
@@ -129,6 +149,7 @@ When disabled, internal testing can continue without credits.
 cd /path/to/frappe-bench
 bench --site <your-site> migrate
 bench --site <your-site> clear-cache
+cd apps/audio_stem && yarn build
 bench build --app audio_stem
 bench restart
 ```

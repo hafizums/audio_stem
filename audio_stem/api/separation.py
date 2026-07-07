@@ -439,14 +439,15 @@ def start_separation(job_name: str):
 		if is_credit_management_enabled() and job.credit_reservation and job.credit_status == "Reserved":
 			try:
 				release_job_reservation(job, reason="Failed to enqueue separation job")
-				job.save(ignore_permissions=True)
 			except Exception as release_exc:
 				job.credit_error = safe_error_message(release_exc)
-				job.save(ignore_permissions=True)
 				frappe.log_error(
 					title=f"Credit release failed after enqueue error for {job.name}",
 					message=frappe.get_traceback(),
 				)
+		job.status = "Draft"
+		job.error_message = safe_error_message(exc)
+		job.save(ignore_permissions=True)
 		raise exc
 
 	return {**_job_payload(job), "already_active": False}

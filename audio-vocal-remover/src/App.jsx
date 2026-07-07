@@ -79,7 +79,9 @@ function AuthenticatedApp({ currentUser }) {
 
 	const displayCurrency = job?.display_currency || settings?.display_currency || "MYR";
 	const costPerSecond = settings?.cost_per_second_usd || 0;
-	const credit = creditBalance || { enabled: false };
+	const credit = settings?.credit_management_enabled
+		? creditBalance || { enabled: true }
+		: { enabled: false };
 	const estimatedCost = getEstimatedCost(job, costPerSecond);
 	const startDisabled = isStartDisabled({
 		job,
@@ -255,7 +257,7 @@ function AuthenticatedApp({ currentUser }) {
 				</Section>
 
 				<Section title="Credits">
-					{!credit.enabled ? (
+					{!settings?.credit_management_enabled ? (
 						<p className="text-sm text-gray-500">Credit management is not enabled.</p>
 					) : credit.error ? (
 						<p className="text-sm text-red-600">{credit.error}</p>
@@ -318,6 +320,14 @@ function AuthenticatedApp({ currentUser }) {
 						(job.status === "Failed" || job.status === "Completed") && (
 							<p className="mt-2 text-sm text-red-600">{job.error_message}</p>
 						)}
+					{settings?.credit_management_enabled && job?.credit_status && (
+						<p className="mt-2 text-sm text-gray-600">
+							Credit status: <strong>{job.credit_status}</strong>
+						</p>
+					)}
+					{settings?.credit_management_enabled && job?.credit_error && (
+						<p className="mt-2 text-sm text-red-600">{job.credit_error}</p>
+					)}
 				</Section>
 
 				<Section title="Original Audio">

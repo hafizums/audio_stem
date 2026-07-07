@@ -51,11 +51,16 @@ def _release_job_credits_if_needed(job, reason: str | None = None):
 	if job.credit_status in ("Released", "Consumed", "Not Required"):
 		return
 
+	if job.credit_status == "Failed":
+		return
+
 	try:
 		release_job_reservation(job, reason=reason)
 		job.save(ignore_permissions=True)
 	except Exception as exc:
 		job.credit_error = safe_error_message(exc)
+		if job.credit_status == "Reserved":
+			job.credit_status = "Failed"
 		job.save(ignore_permissions=True)
 		frappe.log_error(
 			title=f"Credit release failed for job {job.name}",
