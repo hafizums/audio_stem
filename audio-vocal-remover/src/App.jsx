@@ -50,17 +50,88 @@ function LoginPrompt() {
 	);
 }
 
-function AuthenticatedApp({ currentUser }) {
+function DailyUsageSection({ dailyUsage, displayCurrency }) {
+	if (!dailyUsage?.limits_enabled) return null;
+
+	return (
+		<Section title="Daily Usage">
+			<div className="space-y-1 text-sm text-gray-700">
+				<p>
+					Jobs today: <strong>{dailyUsage.jobs_today}</strong>
+					{dailyUsage.daily_job_limit_per_user > 0 && (
+						<>
+							{" "}
+							/ {dailyUsage.daily_job_limit_per_user}
+							{dailyUsage.jobs_remaining != null && (
+								<> ({dailyUsage.jobs_remaining} remaining)</>
+							)}
+						</>
+					)}
+				</p>
+				<p>
+					Duration today: <strong>{dailyUsage.duration_seconds_today}s</strong>
+					{dailyUsage.daily_duration_limit_seconds_per_user > 0 && (
+						<>
+							{" "}
+							/ {dailyUsage.daily_duration_limit_seconds_per_user}s
+							{dailyUsage.duration_seconds_remaining != null && (
+								<> ({dailyUsage.duration_seconds_remaining}s remaining)</>
+							)}
+						</>
+					)}
+				</p>
+				<p>
+					Estimated cost today:{" "}
+					<strong>{formatCost(dailyUsage.cost_usd_today, displayCurrency)}</strong>
+					{dailyUsage.daily_cost_limit_usd_per_user > 0 && (
+						<>
+							{" "}
+							/ {formatCost(dailyUsage.daily_cost_limit_usd_per_user, displayCurrency)}
+							{dailyUsage.cost_usd_remaining != null && (
+								<> ({formatCost(dailyUsage.cost_usd_remaining, displayCurrency)} remaining)</>
+							)}
+						</>
+					)}
+				</p>
+			</div>
+		</Section>
+	);
+}
+
+function PilotBlockedView({ currentUser, settings }) {
+	return (
+		<div className="min-h-screen bg-gray-100">
+			<header className="border-b border-gray-200 bg-white">
+				<div className="mx-auto max-w-6xl px-4 py-4">
+					<h1 className="text-lg font-bold text-gray-900">Audio Vocal Remover</h1>
+					<p className="text-sm text-gray-500">{currentUser}</p>
+				</div>
+			</header>
+			<main className="mx-auto max-w-6xl p-4">
+				<div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-center">
+					<h2 className="text-lg font-semibold text-gray-900">Pilot access required</h2>
+					<p className="mt-2 text-sm text-gray-700">
+						{settings?.blocked_reason ||
+							"Audio separation is currently limited to pilot users. Please contact an administrator."}
+					</p>
+				</div>
+			</main>
+		</div>
+	);
+}
+
+function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 	const [jobName, setJobName] = useState(null);
 	const [job, setJob] = useState(null);
 	const [starting, setStarting] = useState(false);
 	const [retrying, setRetrying] = useState(false);
 	const [zipping, setZipping] = useState(false);
+	const [cancelling, setCancelling] = useState(false);
 	const [uploading, setUploading] = useState(false);
 	const [error, setError] = useState(null);
 	const pollRef = useRef(null);
 
-	const { data: settingsResponse } = useFrappeGetCall(
+	const { data: settingsResponse, mutate: refreshSettings } = useFrappeGetCall(
 		"audio_stem.api.separation.get_page_settings"
 	);
 	const { data: creditBalanceResponse, mutate: refreshCredit } = useFrappeGetCall(
@@ -70,7 +141,7 @@ function AuthenticatedApp({ currentUser }) {
 		"audio_stem.api.separation.get_recent_jobs",
 		{ limit: 10 }
 	);
-	const settings = unwrapFrappeMessage(settingsResponse);
+	const settings = unwrapFrappeMessage(settingsResponse) || initialSettings;
 	const creditBalance = unwrapFrappeMessage(creditBalanceResponse);
 	const recentJobs = unwrapFrappeMessage(recentJobsResponse) || [];
 
@@ -91,6 +162,7 @@ function AuthenticatedApp({ currentUser }) {
 	const { call: getJobDetail } = useFrappePostCall(
 		"audio_stem.api.separation.get_job_detail"
 	);
+	const { call: cancelJob } = useFrappePostCall("audio_stem.api.separation.cancel_job");
 
 	const displayCurrency = job?.display_currency || settings?.display_currency || "MYR";
 	const costPerSecond = settings?.cost_per_second_usd || 0;
@@ -105,6 +177,7 @@ function AuthenticatedApp({ currentUser }) {
 		enabled: settings?.enabled,
 		credit,
 		costPerSecond,
+		settings,
 	});
 	const startBlockedReason = getStartBlockedReason({ job, credit, costPerSecond, settings });
 	const statusMessage = getJobStatusMessage(job, { starting, retrying, zipping });
@@ -126,8 +199,9 @@ function AuthenticatedApp({ currentUser }) {
 		if (TERMINAL_STATUSES.includes(nextJob?.status)) {
 			refreshRecent();
 			refreshCredit();
+			refreshSettings();
 		}
-	}, [getJobDetail, jobName, refreshCredit, refreshRecent, stopPolling]);
+	}, [getJobDetail, jobName, refreshCredit, refreshRecent, refreshSettings, stopPolling]);
 
 	const startPolling = useCallback(() => {
 		stopPolling();
@@ -168,6 +242,7 @@ function AuthenticatedApp({ currentUser }) {
 			setJob(created);
 			await refreshRecent();
 			await refreshCredit();
+			await refreshSettings();
 		} catch (err) {
 			setError(getUploadErrorMessage(err, settings));
 		} finally {
@@ -193,6 +268,7 @@ function AuthenticatedApp({ currentUser }) {
 			}
 			await fetchJobDetail();
 			await refreshCredit();
+			await refreshSettings();
 		} catch (err) {
 			setError(parseFrappeError(err) || err.message || "Failed to start separation");
 			await refreshCredit();
@@ -214,10 +290,29 @@ function AuthenticatedApp({ currentUser }) {
 			await fetchJobDetail();
 			await refreshRecent();
 			await refreshCredit();
+			await refreshSettings();
 		} catch (err) {
 			setError(parseFrappeError(err) || err.message || "Failed to retry job");
 		} finally {
 			setRetrying(false);
+		}
+	};
+
+	const handleCancel = async (name) => {
+		if (cancelling) return;
+		setCancelling(true);
+		setError(null);
+		try {
+			const result = unwrapFrappeMessage(await cancelJob({ job_name: name }));
+			setJobName(name);
+			setJob(result);
+			await refreshRecent();
+			await refreshCredit();
+			await refreshSettings();
+		} catch (err) {
+			setError(parseFrappeError(err) || err.message || "Failed to cancel job");
+		} finally {
+			setCancelling(false);
 		}
 	};
 
@@ -294,6 +389,8 @@ function AuthenticatedApp({ currentUser }) {
 						)}
 					</ul>
 				</Section>
+
+				<DailyUsageSection dailyUsage={settings?.daily_usage} displayCurrency={displayCurrency} />
 
 				<div className="grid gap-4 lg:grid-cols-2">
 					<div className="space-y-4">
@@ -383,8 +480,10 @@ function AuthenticatedApp({ currentUser }) {
 						statusMessage={statusMessage}
 						onRetry={handleRetry}
 						onZip={handleZip}
+						onCancel={handleCancel}
 						retrying={retrying}
 						zipping={zipping}
+						cancelling={cancelling}
 					/>
 				</div>
 
@@ -455,6 +554,16 @@ function AuthenticatedApp({ currentUser }) {
 													>
 														Open
 													</button>
+													{row.can_cancel && (
+														<button
+															type="button"
+															disabled={cancelling}
+															onClick={() => handleCancel(row.name)}
+															className="text-gray-700 hover:underline disabled:opacity-50"
+														>
+															Cancel
+														</button>
+													)}
 													{row.can_retry && (
 														<button
 															type="button"
@@ -489,6 +598,23 @@ function AuthenticatedApp({ currentUser }) {
 			</main>
 		</div>
 	);
+}
+
+function AuthenticatedApp({ currentUser }) {
+	const { data: settingsResponse, isLoading: settingsLoading } = useFrappeGetCall(
+		"audio_stem.api.separation.get_page_settings"
+	);
+	const settings = unwrapFrappeMessage(settingsResponse);
+
+	if (settingsLoading && !settings) {
+		return <div className="p-8 text-center text-gray-500">Loading...</div>;
+	}
+
+	if (settings?.pilot_mode_enabled && settings?.pilot_access_allowed === false) {
+		return <PilotBlockedView currentUser={currentUser} settings={settings} />;
+	}
+
+	return <AudioStemWorkspace currentUser={currentUser} settings={settings} />;
 }
 
 function AppContent() {

@@ -79,6 +79,15 @@ def _cleanup_job(job, settings) -> bool:
 
 	if changed:
 		job.save(ignore_permissions=True)
+		from audio_stem.utils.audit_log import log_audit
+
+		log_audit(
+			"Cleanup",
+			reference_doctype=job.doctype,
+			reference_name=job.name,
+			message="Cleanup removed files for job.",
+			user=job.user,
+		)
 
 	return changed
 

@@ -47,13 +47,21 @@ def _get_display_currency() -> str:
 	return currency or DEFAULT_DISPLAY_CURRENCY
 
 
-def _is_system_manager() -> bool:
-	return frappe.session.user == "Administrator" or "System Manager" in frappe.get_roles()
+def _is_system_manager(user: str | None = None) -> bool:
+	user = user or frappe.session.user
+	return user == "Administrator" or "System Manager" in frappe.get_roles(user)
 
 
 def _require_login():
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Login required"), frappe.PermissionError)
+
+
+def _require_app_access():
+	_require_login()
+	from audio_stem.utils.pilot_access import ensure_pilot_access
+
+	ensure_pilot_access()
 
 
 def _get_job_for_user(job_name: str):
@@ -175,6 +183,16 @@ def _validate_job_for_queue(job, settings=None) -> tuple[bool, str | None]:
 	if credit_reason:
 		return False, credit_reason
 
+	from audio_stem.utils.abuse_protection import ensure_start_allowed
+	from audio_stem.utils.daily_limits import ensure_daily_limits_for_queue
+
+	try:
+		if not _is_system_manager(job.user):
+			ensure_start_allowed(job.user)
+			ensure_daily_limits_for_queue(job.user, job=job)
+	except frappe.ValidationError as exc:
+		return False, str(exc)
+
 	return True, None
 
 
@@ -200,6 +218,12 @@ def _can_retry_job(job, settings=None) -> tuple[bool, str | None]:
 	return _validate_job_for_queue(job, settings or get_settings())
 
 
+def _can_cancel_job(job, settings=None) -> tuple[bool, str | None]:
+	from audio_stem.utils.cancellation import can_cancel_job
+
+	return can_cancel_job(job)
+
+
 def _job_payload(job):
 	return _job_detail_payload(job)
 
@@ -207,6 +231,7 @@ def _job_payload(job):
 def _job_detail_payload(job):
 	can_start, blocked_reason = _can_start_job(job)
 	can_retry, retry_blocked_reason = _can_retry_job(job)
+	can_cancel, cancel_blocked_reason = _can_cancel_job(job)
 	credit_enabled = _credit_settings_flag_enabled()
 	return {
 		"name": job.name,
@@ -231,6 +256,12 @@ def _job_detail_payload(job):
 		"start_blocked_reason": blocked_reason,
 		"can_retry": can_retry,
 		"retry_blocked_reason": retry_blocked_reason,
+		"can_cancel": can_cancel,
+		"cancel_blocked_reason": cancel_blocked_reason,
+		"cancellation_requested": cint(job.cancellation_requested),
+		"cancelled_at": job.cancelled_at,
+		"cancelled_by": job.cancelled_by,
+		"cancel_reason": job.cancel_reason,
 		"can_zip": _can_download_zip(job),
 		"has_vocal": _has_vocal_output(job),
 		"has_instrumental": _has_instrumental_output(job),
@@ -294,7 +325,7 @@ def _save_uploaded_audio(upload) -> dict:
 
 @frappe.whitelist()
 def upload_audio_file():
-	_require_login()
+	_require_app_access()
 
 	files = frappe.request.files
 	if "file" not in files:
@@ -305,7 +336,12 @@ def upload_audio_file():
 
 @frappe.whitelist()
 def create_job_from_file(file_url: str):
-	_require_login()
+	_require_app_access()
+
+	from audio_stem.utils.abuse_protection import ensure_create_allowed
+	from audio_stem.utils.audit_log import log_audit
+
+	ensure_create_allowed()
 
 	if not file_url:
 		frappe.throw(_("file_url is required"))
@@ -340,19 +376,27 @@ def create_job_from_file(file_url: str):
 	)
 	job.insert(ignore_permissions=True)
 
+	log_audit(
+		"Create Job",
+		reference_doctype=job.doctype,
+		reference_name=job.name,
+		message=f"Job created from uploaded file.",
+		metadata={"original_filename": job.original_filename},
+	)
+
 	return _job_payload(job)
 
 
 @frappe.whitelist()
 def get_job_status(job_name: str):
-	_require_login()
+	_require_app_access()
 	job = _get_job_for_user(job_name)
 	return _job_detail_payload(job)
 
 
 @frappe.whitelist()
 def get_job_detail(job_name: str):
-	_require_login()
+	_require_app_access()
 	job = _get_job_for_user(job_name)
 	return _job_detail_payload(job)
 
@@ -361,10 +405,16 @@ def get_job_detail(job_name: str):
 def get_page_settings():
 	_require_login()
 	from audio_stem.integrations.credit_management_client import get_audio_credit_type, is_credit_management_enabled
+	from audio_stem.utils.daily_limits import get_daily_limit_status
+	from audio_stem.utils.pilot_access import get_pilot_access_status
 
 	limits = get_limits_payload()
+	pilot = get_pilot_access_status()
+	daily_usage = get_daily_limit_status() if pilot.get("pilot_access_allowed") else None
 	return {
 		**limits,
+		**pilot,
+		"daily_usage": daily_usage,
 		"display_currency": _get_display_currency(),
 		"credit_management_enabled": is_credit_management_enabled(),
 		"credit_type": get_audio_credit_type() if is_credit_management_enabled() else None,
@@ -375,7 +425,7 @@ def get_page_settings():
 
 @frappe.whitelist()
 def get_my_credit_balance():
-	_require_login()
+	_require_app_access()
 	from audio_stem.integrations.credit_management_client import (
 		credit_management_available,
 		get_audio_credit_type,
@@ -411,7 +461,7 @@ def get_my_credit_balance():
 
 @frappe.whitelist()
 def get_recent_jobs(limit=10):
-	_require_login()
+	_require_app_access()
 	limit = min(cint(limit) or 10, 50)
 	credit_enabled = _credit_settings_flag_enabled()
 
@@ -449,6 +499,7 @@ def get_recent_jobs(limit=10):
 	for row in jobs:
 		job = frappe._dict(row)
 		can_retry, _ = _can_retry_job(job)
+		can_cancel, _ = _can_cancel_job(job)
 		rows.append(
 			{
 				"name": job.name,
@@ -463,6 +514,7 @@ def get_recent_jobs(limit=10):
 				"has_instrumental": _has_instrumental_output(job),
 				"error_summary": job.error_message if job.status == "Failed" else None,
 				"can_retry": can_retry,
+				"can_cancel": can_cancel,
 				"can_zip": _can_download_zip(job),
 			}
 		)
@@ -552,9 +604,11 @@ def _prepare_and_queue_job(
 
 @frappe.whitelist()
 def start_separation(job_name: str):
-	_require_login()
+	_require_app_access()
 	job = _get_job_for_user(job_name)
 	settings = get_settings()
+
+	from audio_stem.utils.audit_log import log_audit
 
 	if job.status in ACTIVE_STATUSES:
 		return {**_job_payload(job), "already_active": True}
@@ -572,14 +626,17 @@ def start_separation(job_name: str):
 		frappe.throw(blocked_reason or _("This job cannot be started."))
 
 	_prepare_and_queue_job(job, settings, preserve_outputs=False, enqueue_failure_status="Draft")
+	log_audit("Start Job", reference_doctype=job.doctype, reference_name=job.name, message="Job queued.")
 	return {**_job_payload(job), "already_active": False}
 
 
 @frappe.whitelist()
 def retry_failed_job(job_name: str):
-	_require_login()
+	_require_app_access()
 	job = _get_job_for_user(job_name)
 	settings = get_settings()
+
+	from audio_stem.utils.audit_log import log_audit
 
 	if job.status in ACTIVE_STATUSES:
 		return {**_job_payload(job), "already_active": True}
@@ -597,13 +654,35 @@ def retry_failed_job(job_name: str):
 		preserve_outputs=True,
 		enqueue_failure_status="Failed",
 	)
+	log_audit("Retry Job", reference_doctype=job.doctype, reference_name=job.name, message="Failed job retried.")
 	return {**_job_payload(job), "already_active": False}
 
 
 @frappe.whitelist()
-def create_job_zip(job_name: str):
-	_require_login()
+def cancel_job(job_name: str, cancel_reason: str | None = None):
+	_require_app_access()
 	job = _get_job_for_user(job_name)
+
+	from audio_stem.utils.audit_log import log_audit
+	from audio_stem.utils.cancellation import apply_cancel_request
+
+	result = apply_cancel_request(job, cancelled_by=frappe.session.user, cancel_reason=cancel_reason)
+	log_audit(
+		"Cancel Job",
+		reference_doctype=job.doctype,
+		reference_name=job.name,
+		message=result.get("message"),
+	)
+	job.reload()
+	return {**_job_detail_payload(job), **result}
+
+
+@frappe.whitelist()
+def create_job_zip(job_name: str):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+
+	from audio_stem.utils.audit_log import log_audit
 
 	if job.status != "Completed":
 		frappe.throw(_("ZIP download is only available for completed jobs."), frappe.ValidationError)
@@ -613,4 +692,5 @@ def create_job_zip(job_name: str):
 	zip_url = create_job_zip_file(job)
 	job.zip_file = zip_url
 	job.save(ignore_permissions=True)
+	log_audit("Create ZIP", reference_doctype=job.doctype, reference_name=job.name, message="ZIP created.")
 	return {"zip_file": zip_url, "job_name": job.name}

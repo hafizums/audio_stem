@@ -44,6 +44,7 @@ class TestAudioSeparationMilestone3(FrappeTestCase):
 			else:
 				setattr(settings, field, value)
 		settings.save(ignore_permissions=True)
+		frappe.set_user("Administrator")
 
 	def _create_file(self, content: bytes, suffix: str = ".mp3"):
 		with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:

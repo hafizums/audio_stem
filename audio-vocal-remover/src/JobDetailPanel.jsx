@@ -57,8 +57,10 @@ export default function JobDetailPanel({
 	statusMessage,
 	onRetry,
 	onZip,
+	onCancel,
 	retrying,
 	zipping,
+	cancelling,
 }) {
 	if (!job) {
 		return (
@@ -105,6 +107,19 @@ export default function JobDetailPanel({
 				</div>
 			)}
 
+			{job.cancellation_requested && job.status !== "Cancelled" && (
+				<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+					Cancellation requested. The current provider job may still finish.
+				</div>
+			)}
+
+			{job.status === "Cancelled" && (
+				<div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+					This job was cancelled.
+					{job.cancel_reason ? ` Reason: ${job.cancel_reason}` : ""}
+				</div>
+			)}
+
 			<dl className="grid gap-3">
 				<DetailRow label="Original file">{job.original_filename || "—"}</DetailRow>
 				<DetailRow label="Duration">
@@ -134,6 +149,16 @@ export default function JobDetailPanel({
 			</dl>
 
 			<div className="flex flex-wrap gap-2">
+				{job.can_cancel && (
+					<button
+						type="button"
+						disabled={cancelling}
+						onClick={() => onCancel(job.name)}
+						className="rounded-md bg-gray-700 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+					>
+						{cancelling ? "Cancelling..." : "Cancel Job"}
+					</button>
+				)}
 				{job.status === "Failed" && job.can_retry && (
 					<button
 						type="button"

@@ -21,6 +21,19 @@
   "section_break_notifications",
   "notify_user_on_completion",
   "notify_user_on_failure",
+  "section_break_pilot",
+  "pilot_mode_enabled",
+  "allowed_roles",
+  "allowed_users",
+  "blocked_users",
+  "section_break_daily_limits",
+  "daily_job_limit_per_user",
+  "daily_duration_limit_seconds_per_user",
+  "daily_cost_limit_usd_per_user",
+  "section_break_abuse",
+  "hourly_create_limit_per_user",
+  "daily_failed_job_limit_per_user",
+  "stuck_job_threshold_minutes",
   "section_break_credits",
   "credit_management_enabled",
   "credit_type",
@@ -127,6 +140,84 @@
    "fieldname": "notify_user_on_failure",
    "fieldtype": "Check",
    "label": "Notify User On Failure"
+  },
+  {
+   "fieldname": "section_break_pilot",
+   "fieldtype": "Section Break",
+   "label": "Pilot Access"
+  },
+  {
+   "default": "0",
+   "fieldname": "pilot_mode_enabled",
+   "fieldtype": "Check",
+   "label": "Pilot Mode Enabled"
+  },
+  {
+   "fieldname": "allowed_roles",
+   "fieldtype": "Small Text",
+   "label": "Allowed Roles"
+  },
+  {
+   "fieldname": "allowed_users",
+   "fieldtype": "Small Text",
+   "label": "Allowed Users"
+  },
+  {
+   "fieldname": "blocked_users",
+   "fieldtype": "Small Text",
+   "label": "Blocked Users"
+  },
+  {
+   "fieldname": "section_break_daily_limits",
+   "fieldtype": "Section Break",
+   "label": "Daily Usage Limits"
+  },
+  {
+   "default": "0",
+   "fieldname": "daily_job_limit_per_user",
+   "fieldtype": "Int",
+   "label": "Daily Job Limit Per User",
+   "non_negative": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "daily_duration_limit_seconds_per_user",
+   "fieldtype": "Int",
+   "label": "Daily Duration Limit Seconds Per User",
+   "non_negative": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "daily_cost_limit_usd_per_user",
+   "fieldtype": "Currency",
+   "label": "Daily Cost Limit USD Per User",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "section_break_abuse",
+   "fieldtype": "Section Break",
+   "label": "Abuse Protection"
+  },
+  {
+   "default": "20",
+   "fieldname": "hourly_create_limit_per_user",
+   "fieldtype": "Int",
+   "label": "Hourly Create Limit Per User",
+   "non_negative": 1
+  },
+  {
+   "default": "10",
+   "fieldname": "daily_failed_job_limit_per_user",
+   "fieldtype": "Int",
+   "label": "Daily Failed Job Limit Per User",
+   "non_negative": 1
+  },
+  {
+   "default": "30",
+   "fieldname": "stuck_job_threshold_minutes",
+   "fieldtype": "Int",
+   "label": "Stuck Job Threshold Minutes",
+   "non_negative": 1
   },
   {
    "fieldname": "section_break_credits",

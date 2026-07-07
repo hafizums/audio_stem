@@ -199,6 +199,37 @@ def get_configuration_checklist_data() -> list[dict]:
 			)
 		)
 
+	if cint(settings.pilot_mode_enabled):
+		items.append(
+			_item(
+				"pilot_mode",
+				_("Pilot Mode"),
+				"ok",
+				_("Pilot mode is enabled."),
+			)
+		)
+	else:
+		items.append(
+			_item(
+				"pilot_mode",
+				_("Pilot Mode"),
+				"ok",
+				_("Pilot mode is disabled."),
+			)
+		)
+
+	from audio_stem.utils.provider_health import get_provider_health_summary
+
+	provider_health = get_provider_health_summary()
+	items.append(
+		_item(
+			"provider_health",
+			_("Provider Health"),
+			provider_health.get("status", "unknown"),
+			provider_health.get("message"),
+		)
+	)
+
 	return items
 
 

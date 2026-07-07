@@ -9,6 +9,8 @@ from frappe.utils import now_datetime
 from frappe.utils.file_manager import get_file_path
 
 from audio_stem.integrations.wavespeed_client import isolate_vocal_and_instrumental
+from audio_stem.utils.audit_log import log_audit
+from audio_stem.utils.cancellation import finalize_cancelled_job, should_stop_for_cancellation
 from audio_stem.utils.errors import safe_error_message
 from audio_stem.utils.limits import calculate_provider_cost, get_settings
 from audio_stem.utils.output_storage import maybe_store_outputs_locally
@@ -68,14 +70,38 @@ def _release_job_credits_if_needed(job, reason: str | None = None):
 		)
 
 
+def _stop_for_cancellation(job):
+	finalize_cancelled_job(
+		job,
+		cancelled_by=job.cancelled_by or job.user,
+		cancel_reason=job.cancel_reason or "Job cancelled",
+	)
+	log_audit(
+		"Cancel Job",
+		reference_doctype=job.doctype,
+		reference_name=job.name,
+		message="Job cancelled during processing.",
+		user=job.user,
+	)
+	return True
+
+
 def process_audio_separation(name: str):
 	job = frappe.get_doc("Audio Separation Job", name)
 
 	try:
+		if should_stop_for_cancellation(job):
+			_stop_for_cancellation(job)
+			return
+
 		job.status = "Uploading"
-		job.started_at = now_datetime()
+		job.started_at = job.started_at or now_datetime()
 		job.save(ignore_permissions=True)
 		frappe.db.commit()
+
+		if should_stop_for_cancellation(job):
+			_stop_for_cancellation(job)
+			return
 
 		local_audio_path = get_file_path(job.original_file)
 		if not local_audio_path:
@@ -84,6 +110,10 @@ def process_audio_separation(name: str):
 		job.status = "Processing"
 		job.save(ignore_permissions=True)
 		frappe.db.commit()
+
+		if should_stop_for_cancellation(job):
+			_stop_for_cancellation(job)
+			return
 
 		result = isolate_vocal_and_instrumental(local_audio_path)
 
@@ -94,6 +124,7 @@ def process_audio_separation(name: str):
 
 		storage_warning = maybe_store_outputs_locally(job, result.vocal_url, result.instrumental_url)
 		job.status = "Completed"
+		job.cancellation_requested = 0
 		job.completed_at = now_datetime()
 		job.error_message = storage_warning
 		job.save(ignore_permissions=True)
@@ -104,10 +135,22 @@ def process_audio_separation(name: str):
 		from audio_stem.utils.notifications import notify_job_completed
 
 		notify_job_completed(job)
+		log_audit(
+			"Complete Job",
+			reference_doctype=job.doctype,
+			reference_name=job.name,
+			message="Job completed.",
+			user=job.user,
+		)
 
 	except Exception as exc:
 		frappe.db.rollback()
 		job.reload()
+
+		if should_stop_for_cancellation(job):
+			_stop_for_cancellation(job)
+			return
+
 		job.status = "Failed"
 		job.error_message = safe_error_message(exc)
 		job.completed_at = now_datetime()
@@ -119,6 +162,13 @@ def process_audio_separation(name: str):
 		from audio_stem.utils.notifications import notify_job_failed
 
 		notify_job_failed(job)
+		log_audit(
+			"Fail Job",
+			reference_doctype=job.doctype,
+			reference_name=job.name,
+			message=job.error_message,
+			user=job.user,
+		)
 
 		frappe.log_error(
 			title=f"Audio separation failed for {job.name}",

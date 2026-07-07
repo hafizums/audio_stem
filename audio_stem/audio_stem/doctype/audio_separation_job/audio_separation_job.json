@@ -31,6 +31,11 @@
   "section_break_meta",
   "error_message",
   "cleanup_notes",
+  "section_break_cancellation",
+  "cancellation_requested",
+  "cancelled_at",
+  "cancelled_by",
+  "cancel_reason",
   "started_at",
   "completed_at",
   "zip_file"
@@ -190,6 +195,37 @@
    "fieldname": "cleanup_notes",
    "fieldtype": "Small Text",
    "label": "Cleanup Notes",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_cancellation",
+   "fieldtype": "Section Break",
+   "label": "Cancellation"
+  },
+  {
+   "default": "0",
+   "fieldname": "cancellation_requested",
+   "fieldtype": "Check",
+   "label": "Cancellation Requested",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cancelled_at",
+   "fieldtype": "Datetime",
+   "label": "Cancelled At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cancelled_by",
+   "fieldtype": "Link",
+   "label": "Cancelled By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cancel_reason",
+   "fieldtype": "Small Text",
+   "label": "Cancel Reason",
    "read_only": 1
   },
   {

@@ -66,6 +66,7 @@ class TestAudioSeparationMilestone4(FrappeTestCase):
 			else:
 				setattr(settings, field, value)
 		settings.save(ignore_permissions=True)
+		frappe.set_user("Administrator")
 
 	def _enable_credit_management(self):
 		settings = frappe.get_single("Audio Separation Settings")

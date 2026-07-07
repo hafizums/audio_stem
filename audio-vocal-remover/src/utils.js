@@ -61,6 +61,8 @@ export function getJobStatusMessage(job, { starting, retrying, zipping } = {}) {
 			return "Separation completed. Preview, download, or create a ZIP below.";
 		case "Failed":
 			return job.error_message || "Separation failed. You can retry if allowed.";
+		case "Cancelled":
+			return "This job was cancelled.";
 		case "Draft":
 			return "Job is ready. Review the estimate and start separation when ready.";
 		default:
@@ -122,10 +124,30 @@ export function getEstimatedCost(job, costPerSecond) {
 	return job.estimated_cost_usd ?? job.duration_seconds * (costPerSecond || 0);
 }
 
-export function isStartDisabled({ job, jobName, starting, enabled, credit, costPerSecond }) {
+export function isStartDisabled({ job, jobName, starting, enabled, credit, costPerSecond, settings }) {
 	if (!jobName || starting || enabled === 0) return true;
 	if (!job) return true;
 	if (!job.can_start || job.is_active) return true;
+
+	const daily = settings?.daily_usage;
+	if (daily?.limits_enabled) {
+		if (daily.jobs_remaining === 0) return true;
+		if (
+			job.duration_seconds &&
+			daily.duration_seconds_remaining != null &&
+			job.duration_seconds > daily.duration_seconds_remaining
+		) {
+			return true;
+		}
+		const cost = getEstimatedCost(job, costPerSecond);
+		if (
+			cost &&
+			daily.cost_usd_remaining != null &&
+			cost > daily.cost_usd_remaining
+		) {
+			return true;
+		}
+	}
 
 	const cost = getEstimatedCost(job, costPerSecond);
 	if (
@@ -170,6 +192,28 @@ export function getStartBlockedReason({ job, credit, costPerSecond, settings }) 
 
 	if (!job.can_start) {
 		return job.start_blocked_reason || "Start is not available for this job.";
+	}
+
+	const daily = settings?.daily_usage;
+	if (daily?.limits_enabled) {
+		if (daily.jobs_remaining === 0) {
+			return "Daily job limit reached.";
+		}
+		if (
+			job.duration_seconds &&
+			daily.duration_seconds_remaining != null &&
+			job.duration_seconds > daily.duration_seconds_remaining
+		) {
+			return "Daily audio duration limit reached.";
+		}
+		const cost = getEstimatedCost(job, costPerSecond);
+		if (
+			cost &&
+			daily.cost_usd_remaining != null &&
+			cost > daily.cost_usd_remaining
+		) {
+			return "Daily provider cost limit reached.";
+		}
 	}
 
 	if (settings?.enabled === 0) {

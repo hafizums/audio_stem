@@ -349,6 +349,104 @@ bench --site <your-site> run-tests --app audio_stem
 | Cleanup did not delete files | Cleanup disabled or retention not reached | `cleanup_enabled`, `retention_days`, job age |
 | User did not receive notification | Notifications disabled or email not configured | `notify_user_on_*` flags, site email settings, Error Log |
 
+## Milestone 7
+
+Controlled internal pilot safety: access control, daily limits, cancellation, queue visibility, provider health, audit logs, and abuse protection.
+
+### Pilot mode
+
+| Field | Default | Purpose |
+| --- | --- | --- |
+| `pilot_mode_enabled` | 0 | When enabled, only allowlisted users/roles can use separation APIs |
+| `allowed_users` | — | Newline/comma-separated User emails allowed in pilot |
+| `allowed_roles` | — | Newline/comma-separated roles allowed in pilot |
+| `blocked_users` | — | Users blocked even if they match an allowed role (System Manager bypasses) |
+
+When pilot mode is off, existing access behavior is unchanged. The SPA at `/audio-vocal-remover` shows a safe blocked message for users who are not allowed.
+
+### Daily usage limits
+
+| Field | Default | Purpose |
+| --- | --- | --- |
+| `daily_job_limit_per_user` | 0 | Max jobs per user per calendar day (`0` = unlimited) |
+| `daily_duration_limit_seconds_per_user` | 0 | Max audio seconds processed per day |
+| `daily_cost_limit_usd_per_user` | 0 | Max estimated provider cost per day |
+
+Counts jobs in `Queued`, `Uploading`, `Processing`, and `Completed`. Failed jobs count only when `credit_status = Consumed`. System Manager bypasses limits. Limits are enforced before queueing and shown in the SPA.
+
+### Cancellation
+
+API: `audio_stem.api.separation.cancel_job(job_name)`
+
+- Owner or System Manager only.
+- `Draft` / `Queued`: immediate cancel and credit reservation release when credits are enabled.
+- `Uploading` / `Processing`: sets `cancellation_requested`; worker stops before provider when possible. If the provider call already finished, the job may still complete safely.
+- Job fields: `cancellation_requested`, `cancelled_at`, `cancelled_by`, `cancel_reason`.
+
+### Queue health (System Manager)
+
+API: `audio_stem.api.admin.get_queue_health`
+
+Returns active/queued/uploading/processing counts, oldest active job age, stuck jobs (older than `stuck_job_threshold_minutes`, default 30), recent failures (24h), and worker guidance. The SPA admin section lists stuck jobs without exposing secrets or tracebacks.
+
+### Provider health
+
+Module: `audio_stem.utils.provider_health.get_provider_health_summary`
+
+Uses recent job outcomes only (no paid WaveSpeed health ping). Status: `ok`, `warning`, `error`, or `unknown`.
+
+### Audit log
+
+DocType: **Audio Stem Audit Log** (append-only)
+
+Logs create/start/retry/cancel/complete/fail/ZIP/cleanup/admin views. Does not store API keys, tracebacks, or raw sensitive provider payloads.
+
+### Abuse protection
+
+| Field | Default | Purpose |
+| --- | --- | --- |
+| `hourly_create_limit_per_user` | 20 | Max job creations per user per hour (`0` = unlimited) |
+| `daily_failed_job_limit_per_user` | 10 | Max failed jobs per day before new starts are blocked |
+
+System Manager bypasses abuse limits.
+
+### Manual test (Milestone 7)
+
+```bash
+cd /path/to/frappe-bench
+bench --site <your-site> migrate
+cd apps/audio_stem && yarn build
+bench build --app audio_stem
+bench --site <your-site> clear-cache
+bench restart
+bench --site <your-site> run-tests --app audio_stem
+```
+
+1. Deploy and migrate.
+2. Enable **pilot mode** in Audio Separation Settings.
+3. Add one allowed user email.
+4. Confirm the allowed user can open `/audio-vocal-remover`.
+5. Confirm an unlisted normal user sees the pilot blocked message.
+6. Set a low `daily_job_limit_per_user` and confirm the user is blocked after the limit.
+7. Start a job and cancel while **Queued**; confirm status `Cancelled` and credits released if enabled.
+8. Start another job and request cancel while **Processing**; confirm safe cancellation messaging.
+9. Log in as System Manager and review queue health and provider health in the admin section.
+10. Confirm **Audio Stem Audit Log** entries are created for key actions.
+11. Test mobile layout in browser dev tools.
+12. Run the full test suite.
+
+### Troubleshooting (Milestone 7)
+
+| Symptom | Likely cause | What to check |
+| --- | --- | --- |
+| Pilot user blocked | Not on allowlist or on blocked list | `allowed_users`, `allowed_roles`, `blocked_users` |
+| Daily limit reached | Usage counters include queued/completed jobs today | `daily_*` settings; SPA daily usage panel |
+| Cancel did not stop processing | Provider call already in flight | `cancellation_requested` on job; safe user message |
+| Queue health shows stuck jobs | Worker down or slow provider | `stuck_job_threshold_minutes`; long queue worker |
+| Provider health `unknown` | No terminal jobs in last 24h | Recent Completed/Failed jobs |
+| Too many creates blocked | Hourly abuse limit | `hourly_create_limit_per_user` |
+| Starts blocked after failures | Daily failed-job limit | `daily_failed_job_limit_per_user` |
+
 ### Run tests
 
 ```bash

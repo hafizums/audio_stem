@@ -24,13 +24,20 @@ from audio_stem.workers.separation_worker import process_audio_separation
 
 class TestAudioSeparation(FrappeTestCase):
 	def setUp(self):
+		frappe.set_user("Administrator")
 		settings = frappe.get_single("Audio Separation Settings")
 		self._saved_enabled = settings.enabled
 		self._saved_api_key = settings.get_password("wavespeed_api_key", raise_exception=False)
 		self._saved_credit_enabled = settings.credit_management_enabled
+		self._saved_pilot_mode = getattr(settings, "pilot_mode_enabled", 0)
+		self._saved_hourly_create = getattr(settings, "hourly_create_limit_per_user", 0)
+		self._saved_daily_failed = getattr(settings, "daily_failed_job_limit_per_user", 0)
 		settings.enabled = 1
 		settings.wavespeed_api_key = "test-api-key"
 		settings.credit_management_enabled = 0
+		settings.pilot_mode_enabled = 0
+		settings.hourly_create_limit_per_user = 0
+		settings.daily_failed_job_limit_per_user = 0
 		settings.save(ignore_permissions=True)
 
 	def tearDown(self):
@@ -38,7 +45,11 @@ class TestAudioSeparation(FrappeTestCase):
 		settings.enabled = self._saved_enabled
 		settings.wavespeed_api_key = self._saved_api_key or ""
 		settings.credit_management_enabled = self._saved_credit_enabled
+		settings.pilot_mode_enabled = self._saved_pilot_mode
+		settings.hourly_create_limit_per_user = self._saved_hourly_create
+		settings.daily_failed_job_limit_per_user = self._saved_daily_failed
 		settings.save(ignore_permissions=True)
+		frappe.set_user("Administrator")
 
 	def _create_job(self, with_file: bool = True):
 		job = frappe.get_doc(
@@ -135,6 +146,12 @@ class TestAudioSeparation(FrappeTestCase):
 
 class TestAudioSeparationPageAPI(FrappeTestCase):
 	def setUp(self):
+		frappe.set_user("Administrator")
+		settings = frappe.get_single("Audio Separation Settings")
+		settings.pilot_mode_enabled = 0
+		settings.hourly_create_limit_per_user = 0
+		settings.daily_failed_job_limit_per_user = 0
+		settings.save(ignore_permissions=True)
 		self.suffix = uuid.uuid4().hex[:8]
 		self.user_a = f"audio-user-a-{self.suffix}@example.com"
 		self.user_b = f"audio-user-b-{self.suffix}@example.com"
@@ -148,6 +165,9 @@ class TestAudioSeparationPageAPI(FrappeTestCase):
 						"send_welcome_email": 0,
 					}
 				).insert(ignore_permissions=True)
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
 
 	def _upload_file_as(self, user: str):
 		frappe.set_user(user)
