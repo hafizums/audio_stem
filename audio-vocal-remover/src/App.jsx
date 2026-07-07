@@ -6,6 +6,8 @@ import {
 	useFrappeGetCall,
 	useFrappePostCall,
 } from "frappe-react-sdk";
+import AdminSection from "./AdminSection";
+import JobDetailPanel, { StatusBadge } from "./JobDetailPanel";
 import {
 	ACTIVE_STATUSES,
 	TERMINAL_STATUSES,
@@ -14,29 +16,20 @@ import {
 	getEstimatedCost,
 	getJobStatusMessage,
 	getStartBlockedReason,
-	getStatusBadgeClass,
 	getUploadErrorMessage,
 	isStartDisabled,
 	parseFrappeError,
 	unwrapFrappeMessage,
 } from "./utils";
 
-function Section({ title, children }) {
+function Section({ title, children, className = "" }) {
 	return (
-		<section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-			<h2 className="mb-3 text-base font-semibold text-gray-900">{title}</h2>
+		<section
+			className={`rounded-lg border border-gray-200 bg-white p-4 shadow-sm ${className}`}
+		>
+			{title && <h2 className="mb-3 text-base font-semibold text-gray-900">{title}</h2>}
 			{children}
 		</section>
-	);
-}
-
-function StatusBadge({ status }) {
-	return (
-		<span
-			className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getStatusBadgeClass(status)}`}
-		>
-			{status}
-		</span>
 	);
 }
 
@@ -95,8 +88,8 @@ function AuthenticatedApp({ currentUser }) {
 	const { call: createJobZip } = useFrappePostCall(
 		"audio_stem.api.separation.create_job_zip"
 	);
-	const { call: getJobStatus } = useFrappePostCall(
-		"audio_stem.api.separation.get_job_status"
+	const { call: getJobDetail } = useFrappePostCall(
+		"audio_stem.api.separation.get_job_detail"
 	);
 
 	const displayCurrency = job?.display_currency || settings?.display_currency || "MYR";
@@ -123,9 +116,9 @@ function AuthenticatedApp({ currentUser }) {
 		}
 	}, []);
 
-	const fetchJobStatus = useCallback(async () => {
+	const fetchJobDetail = useCallback(async () => {
 		if (!jobName) return;
-		const nextJob = unwrapFrappeMessage(await getJobStatus({ job_name: jobName }));
+		const nextJob = unwrapFrappeMessage(await getJobDetail({ job_name: jobName }));
 		setJob(nextJob);
 		if (!ACTIVE_STATUSES.includes(nextJob?.status)) {
 			stopPolling();
@@ -134,13 +127,13 @@ function AuthenticatedApp({ currentUser }) {
 			refreshRecent();
 			refreshCredit();
 		}
-	}, [getJobStatus, jobName, refreshCredit, refreshRecent, stopPolling]);
+	}, [getJobDetail, jobName, refreshCredit, refreshRecent, stopPolling]);
 
 	const startPolling = useCallback(() => {
 		stopPolling();
-		fetchJobStatus();
-		pollRef.current = setInterval(fetchJobStatus, 3000);
-	}, [fetchJobStatus, stopPolling]);
+		fetchJobDetail();
+		pollRef.current = setInterval(fetchJobDetail, 3000);
+	}, [fetchJobDetail, stopPolling]);
 
 	useEffect(() => {
 		if (job && ACTIVE_STATUSES.includes(job.status)) {
@@ -198,7 +191,7 @@ function AuthenticatedApp({ currentUser }) {
 			if (result) {
 				setJob((prev) => ({ ...prev, ...result }));
 			}
-			await fetchJobStatus();
+			await fetchJobDetail();
 			await refreshCredit();
 		} catch (err) {
 			setError(parseFrappeError(err) || err.message || "Failed to start separation");
@@ -218,7 +211,7 @@ function AuthenticatedApp({ currentUser }) {
 			if (result) {
 				setJob((prev) => ({ ...(prev?.name === name ? prev : {}), ...result }));
 			}
-			await fetchJobStatus();
+			await fetchJobDetail();
 			await refreshRecent();
 			await refreshCredit();
 		} catch (err) {
@@ -238,7 +231,7 @@ function AuthenticatedApp({ currentUser }) {
 				window.open(result.zip_file, "_blank", "noopener,noreferrer");
 			}
 			if (jobName === name) {
-				await fetchJobStatus();
+				await fetchJobDetail();
 			}
 		} catch (err) {
 			setError(parseFrappeError(err) || err.message || "Failed to create ZIP file");
@@ -250,281 +243,210 @@ function AuthenticatedApp({ currentUser }) {
 	const loadJob = async (name) => {
 		setJobName(name);
 		setError(null);
-		const nextJob = unwrapFrappeMessage(await getJobStatus({ job_name: name }));
+		const nextJob = unwrapFrappeMessage(await getJobDetail({ job_name: name }));
 		setJob(nextJob);
 	};
 
 	return (
 		<div className="min-h-screen bg-gray-100">
 			<header className="border-b border-gray-200 bg-white">
-				<div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
+				<div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
 					<div>
 						<h1 className="text-lg font-bold text-gray-900">Audio Vocal Remover</h1>
-						<p className="text-sm text-gray-500">Separate vocals and instrumentals with WaveSpeed</p>
+						<p className="text-sm text-gray-500">
+							Upload an audio file and generate separate vocal and instrumental tracks.
+						</p>
 					</div>
-					<div className="text-right text-sm text-gray-600">
+					<div className="text-sm text-gray-600 sm:text-right">
 						<p>{currentUser}</p>
-						<a href="/login?redirect-to=/audio-vocal-remover" className="text-blue-600 hover:underline">
+						<a
+							href="/login?redirect-to=/audio-vocal-remover"
+							className="text-blue-600 hover:underline"
+						>
 							Switch account
 						</a>
 					</div>
 				</div>
 			</header>
 
-			<main className="mx-auto max-w-5xl space-y-4 p-4">
+			<main className="mx-auto max-w-6xl space-y-4 p-4">
 				{error && (
 					<div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
 						{error}
 					</div>
 				)}
 
-				<Section title="Upload Audio">
-					{jobName && (
-						<p className="mb-3 text-sm text-gray-500">
-							Job created. Upload another file to start over.
-						</p>
-					)}
-					<label className="inline-flex cursor-pointer items-center rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800">
-						{uploading ? "Uploading..." : "Upload Audio File"}
-						<input
-							type="file"
-							className="hidden"
-							accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.aac"
-							disabled={uploading}
-							onChange={handleFileChange}
-						/>
-					</label>
-				</Section>
-
-				<Section title="Limits">
-					<p className="text-sm text-gray-600">
-						{settings
-							? `Max file size: ${settings.max_file_size_mb} MB. Max duration: ${settings.max_audio_duration_seconds} seconds.`
-							: "Loading limits..."}
+				<Section title="">
+					<p className="text-sm text-gray-700">
+						Upload an audio file and generate separate vocal and instrumental tracks using
+						WaveSpeed.
 					</p>
+					<ul className="mt-3 list-inside list-disc space-y-1 text-sm text-gray-600">
+						<li>
+							Accepted types: {settings?.accepted_file_types || "MP3, WAV, M4A, FLAC, OGG, AAC"}
+						</li>
+						<li>
+							Max file size: {settings?.max_file_size_mb ?? "—"} MB. Max duration:{" "}
+							{settings?.max_audio_duration_seconds ?? "—"} seconds.
+						</li>
+						{settings?.credit_management_enabled && (
+							<li>Credits are required before starting separation when credit integration is enabled.</li>
+						)}
+					</ul>
 				</Section>
 
-				<Section title="Cost Estimate">
-					{!job ? (
-						<p className="text-sm text-gray-500">Upload an audio file to see the estimate.</p>
-					) : job.duration_seconds ? (
-						<p className="text-sm text-gray-700">
-							Duration: <strong>{job.duration_seconds}s</strong>
-							<br />
-							Estimated provider cost:{" "}
-							<strong>{formatCost(estimatedCost, displayCurrency)}</strong>
-						</p>
-					) : (
-						<p className="text-sm text-amber-700">
-							Audio duration is unknown. Separation cannot be started until duration is available.
-						</p>
-					)}
-				</Section>
-
-				<Section title="Credits">
-					{!settings?.credit_management_enabled ? (
-						<p className="text-sm text-gray-500">Credit management is not enabled.</p>
-					) : credit.error ? (
-						<p className="text-sm text-red-600">
-							Credit integration is unavailable: {credit.error}
-						</p>
-					) : (
-						<div className="space-y-1 text-sm text-gray-700">
-							<p>
-								Credit type: <strong>{credit.credit_type}</strong>
-							</p>
-							<p>
-								Current balance:{" "}
-								<strong>{formatCost(credit.current_balance, displayCurrency)}</strong>
-							</p>
-							<p>
-								Reserved balance:{" "}
-								<strong>{formatCost(credit.reserved_balance, displayCurrency)}</strong>
-							</p>
-							<p>
-								Available balance:{" "}
-								<strong>{formatCost(credit.available_balance, displayCurrency)}</strong>
-							</p>
-							<p>
-								{job?.duration_seconds ? (
-									<>
-										Estimated job cost:{" "}
-										<strong>{formatCost(estimatedCost, displayCurrency)}</strong>
-									</>
-								) : (
-									"Estimated job cost will appear after upload."
-								)}
-							</p>
-						</div>
-					)}
-				</Section>
-
-				<Section title="Start Separation">
-					<button
-						type="button"
-						disabled={startDisabled || job?.is_active}
-						onClick={handleStart}
-						className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-					>
-						{starting ? "Starting..." : "Start Separation"}
-					</button>
-					{startBlockedReason && (
-						<p className="mt-2 text-sm text-gray-600">{startBlockedReason}</p>
-					)}
-				</Section>
-
-				<Section title="Job Status">
-					{job ? (
-						<div className="space-y-2">
-							<p className="font-medium text-gray-900">
-								Job <strong>{job.name}</strong>{" "}
-								<StatusBadge status={job.status} />
-							</p>
-							<p className="text-sm text-gray-600">{statusMessage}</p>
-							{settings?.credit_management_enabled && job.credit_status && (
-								<p className="text-sm text-gray-600">
-									Credit status: <strong>{job.credit_status}</strong>
+				<div className="grid gap-4 lg:grid-cols-2">
+					<div className="space-y-4">
+						<Section title="Upload Audio">
+							{uploading && (
+								<p className="mb-3 text-sm text-blue-700">Uploading and creating job...</p>
+							)}
+							{jobName && !uploading && (
+								<p className="mb-3 text-sm text-gray-500">
+									Job <strong>{jobName}</strong> created. Upload another file to start over.
 								</p>
 							)}
-							{settings?.credit_management_enabled && job.credit_error && (
-								<p className="text-sm text-red-600">{job.credit_error}</p>
-							)}
-							{job.status === "Failed" && job.can_retry && (
+							<label className="flex w-full cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-sm font-medium text-gray-700 hover:border-gray-400 hover:bg-gray-100 sm:py-10">
+								{uploading ? "Uploading..." : "Tap or click to upload audio"}
+								<input
+									type="file"
+									className="hidden"
+									accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.aac"
+									disabled={uploading}
+									onChange={handleFileChange}
+								/>
+							</label>
+						</Section>
+
+						{job && job.status === "Draft" && (
+							<Section title="Cost Estimate">
+								{job.duration_seconds ? (
+									<p className="text-sm text-gray-700">
+										Duration: <strong>{job.duration_seconds}s</strong>
+										<br />
+										Estimated provider cost:{" "}
+										<strong>{formatCost(estimatedCost, displayCurrency)}</strong>
+									</p>
+								) : (
+									<p className="text-sm text-amber-700">
+										Audio duration is unknown. Separation cannot be started until duration is
+										available.
+									</p>
+								)}
+							</Section>
+						)}
+
+						{settings?.credit_management_enabled && (
+							<Section title="Credits">
+								{credit.error ? (
+									<p className="text-sm text-red-600">
+										Credit integration is unavailable: {credit.error}
+									</p>
+								) : (
+									<div className="space-y-1 text-sm text-gray-700">
+										<p>
+											Available balance:{" "}
+											<strong>{formatCost(credit.available_balance, displayCurrency)}</strong>
+										</p>
+										{job?.duration_seconds && (
+											<p>
+												Estimated job cost:{" "}
+												<strong>{formatCost(estimatedCost, displayCurrency)}</strong>
+											</p>
+										)}
+									</div>
+								)}
+							</Section>
+						)}
+
+						{job && job.status === "Draft" && (
+							<Section title="Start Separation">
 								<button
 									type="button"
-									disabled={retrying || job.is_active}
-									onClick={() => handleRetry(job.name)}
-									className="rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+									disabled={startDisabled || job?.is_active}
+									onClick={handleStart}
+									className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
 								>
-									{retrying ? "Retrying..." : "Retry Job"}
+									{starting ? "Starting..." : "Start Separation"}
 								</button>
-							)}
-							{job.can_zip && (
-								<button
-									type="button"
-									disabled={zipping}
-									onClick={() => handleZip(job.name)}
-									className="ml-2 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-								>
-									{zipping ? "Creating ZIP..." : "Download ZIP"}
-								</button>
-							)}
-						</div>
-					) : (
-						<p className="text-sm text-gray-500">No active job</p>
-					)}
-				</Section>
+								{startBlockedReason && (
+									<p className="mt-2 text-sm text-gray-600">{startBlockedReason}</p>
+								)}
+							</Section>
+						)}
+					</div>
 
-				<Section title="Original Audio">
-					{job?.original_file ? (
-						<audio controls preload="none" src={job.original_file} className="w-full" />
-					) : (
-						<p className="text-sm text-gray-500">Original audio not available.</p>
-					)}
-				</Section>
-
-				<Section title="Vocal Output">
-					{job?.vocal_output_url || job?.vocal_file ? (
-						<>
-							<audio
-								controls
-								preload="none"
-								src={job.vocal_output_url || job.vocal_file}
-								className="w-full"
-							/>
-							<a
-								href={job.vocal_output_url || job.vocal_file}
-								className="mt-2 inline-block text-sm text-blue-600 hover:underline"
-								download
-							>
-								Download Vocal
-							</a>
-						</>
-					) : (
-						<p className="text-sm text-gray-500">Vocal output not available yet.</p>
-					)}
-				</Section>
-
-				<Section title="Instrumental Output">
-					{job?.instrumental_output_url || job?.instrumental_file ? (
-						<>
-							<audio
-								controls
-								preload="none"
-								src={job.instrumental_output_url || job.instrumental_file}
-								className="w-full"
-							/>
-							<a
-								href={job.instrumental_output_url || job.instrumental_file}
-								className="mt-2 inline-block text-sm text-blue-600 hover:underline"
-								download
-							>
-								Download Instrumental
-							</a>
-						</>
-					) : (
-						<p className="text-sm text-gray-500">Instrumental output not available yet.</p>
-					)}
-				</Section>
+					<JobDetailPanel
+						job={job}
+						settings={settings}
+						displayCurrency={displayCurrency}
+						statusMessage={statusMessage}
+						onRetry={handleRetry}
+						onZip={handleZip}
+						retrying={retrying}
+						zipping={zipping}
+					/>
+				</div>
 
 				<Section title="Recent Jobs">
 					{!recentJobs?.length ? (
-						<p className="text-sm text-gray-500">No jobs yet.</p>
+						<div className="rounded-md border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center">
+							<p className="text-sm font-medium text-gray-700">No jobs yet</p>
+							<p className="mt-1 text-sm text-gray-500">
+								Upload your first audio file to create a separation job.
+							</p>
+						</div>
 					) : (
-						<div className="overflow-x-auto">
+						<div className="-mx-4 overflow-x-auto sm:mx-0">
 							<table className="min-w-full border border-gray-200 text-sm">
 								<thead className="bg-gray-50">
 									<tr>
-										<th className="border-b px-3 py-2 text-left">Job</th>
-										<th className="border-b px-3 py-2 text-left">File</th>
-										<th className="border-b px-3 py-2 text-left">Status</th>
+										<th className="border-b px-2 py-2 text-left sm:px-3">Job</th>
+										<th className="hidden border-b px-2 py-2 text-left sm:table-cell sm:px-3">
+											File
+										</th>
+										<th className="border-b px-2 py-2 text-left sm:px-3">Status</th>
 										{settings?.credit_management_enabled && (
-											<th className="border-b px-3 py-2 text-left">Credit</th>
+											<th className="hidden border-b px-2 py-2 text-left md:table-cell md:px-3">
+												Credit
+											</th>
 										)}
-										<th className="border-b px-3 py-2 text-left">Duration</th>
-										<th className="border-b px-3 py-2 text-left">Cost</th>
-										<th className="border-b px-3 py-2 text-left">Created</th>
-										<th className="border-b px-3 py-2 text-left">Completed</th>
-										<th className="border-b px-3 py-2 text-left">Outputs</th>
-										<th className="border-b px-3 py-2 text-left">Actions</th>
+										<th className="hidden border-b px-2 py-2 text-left lg:table-cell lg:px-3">
+											Duration
+										</th>
+										<th className="border-b px-2 py-2 text-left sm:px-3">Actions</th>
 									</tr>
 								</thead>
 								<tbody>
 									{recentJobs.map((row) => (
-										<tr key={row.name} className="hover:bg-gray-50">
-											<td className="border-b px-3 py-2 font-medium text-gray-900">{row.name}</td>
-											<td className="border-b px-3 py-2 text-gray-600">
+										<tr
+											key={row.name}
+											className={`hover:bg-gray-50 ${jobName === row.name ? "bg-blue-50" : ""}`}
+										>
+											<td className="border-b px-2 py-2 font-medium text-gray-900 sm:px-3">
+												{row.name}
+												<p className="text-xs text-gray-500 sm:hidden">
+													{row.original_filename || "—"}
+												</p>
+											</td>
+											<td className="hidden border-b px-2 py-2 text-gray-600 sm:table-cell sm:px-3">
 												{row.original_filename || "—"}
 											</td>
-											<td className="border-b px-3 py-2">
+											<td className="border-b px-2 py-2 sm:px-3">
 												<StatusBadge status={row.status} />
 												{row.error_summary && (
 													<p className="mt-1 text-xs text-red-600">{row.error_summary}</p>
 												)}
 											</td>
 											{settings?.credit_management_enabled && (
-												<td className="border-b px-3 py-2">{row.credit_status || "—"}</td>
+												<td className="hidden border-b px-2 py-2 md:table-cell md:px-3">
+													{row.credit_status || "—"}
+												</td>
 											)}
-											<td className="border-b px-3 py-2">
+											<td className="hidden border-b px-2 py-2 lg:table-cell lg:px-3">
 												{row.duration_seconds ? `${row.duration_seconds}s` : "—"}
 											</td>
-											<td className="border-b px-3 py-2">
-												{row.provider_cost_usd
-													? formatCost(row.provider_cost_usd, displayCurrency)
-													: "—"}
-											</td>
-											<td className="border-b px-3 py-2 text-gray-600">
-												{formatDateTime(row.creation)}
-											</td>
-											<td className="border-b px-3 py-2 text-gray-600">
-												{formatDateTime(row.completed_at)}
-											</td>
-											<td className="border-b px-3 py-2 text-xs text-gray-600">
-												{row.has_vocal ? "Vocal" : "—"}
-												{row.has_vocal && row.has_instrumental ? " / " : ""}
-												{row.has_instrumental ? "Instrumental" : ""}
-											</td>
-											<td className="border-b px-3 py-2">
+											<td className="border-b px-2 py-2 sm:px-3">
 												<div className="flex flex-wrap gap-2">
 													<button
 														type="button"
@@ -562,6 +484,8 @@ function AuthenticatedApp({ currentUser }) {
 						</div>
 					)}
 				</Section>
+
+				{settings?.is_system_manager && <AdminSection />}
 			</main>
 		</div>
 	);

@@ -101,6 +101,9 @@ def process_audio_separation(name: str):
 
 		job.reload()
 		_consume_job_credits_if_needed(job)
+		from audio_stem.utils.notifications import notify_job_completed
+
+		notify_job_completed(job)
 
 	except Exception as exc:
 		frappe.db.rollback()
@@ -112,6 +115,10 @@ def process_audio_separation(name: str):
 		frappe.db.commit()
 
 		_release_job_credits_if_needed(job, reason=job.error_message)
+
+		from audio_stem.utils.notifications import notify_job_failed
+
+		notify_job_failed(job)
 
 		frappe.log_error(
 			title=f"Audio separation failed for {job.name}",

@@ -201,6 +201,10 @@ def _can_retry_job(job, settings=None) -> tuple[bool, str | None]:
 
 
 def _job_payload(job):
+	return _job_detail_payload(job)
+
+
+def _job_detail_payload(job):
 	can_start, blocked_reason = _can_start_job(job)
 	can_retry, retry_blocked_reason = _can_retry_job(job)
 	credit_enabled = _credit_settings_flag_enabled()
@@ -215,12 +219,14 @@ def _job_payload(job):
 		"instrumental_file": job.instrumental_file,
 		"zip_file": job.get("zip_file"),
 		"error_message": job.error_message,
+		"cleanup_notes": job.get("cleanup_notes"),
 		"duration_seconds": cint(job.duration_seconds),
 		"provider_cost_usd": flt(job.provider_cost_usd),
 		"estimated_cost_usd": calculate_provider_cost(job.duration_seconds),
 		"display_currency": _get_display_currency(),
-		"completed_at": job.completed_at,
 		"creation": job.creation,
+		"started_at": job.started_at,
+		"completed_at": job.completed_at,
 		"can_start": can_start,
 		"start_blocked_reason": blocked_reason,
 		"can_retry": can_retry,
@@ -341,7 +347,14 @@ def create_job_from_file(file_url: str):
 def get_job_status(job_name: str):
 	_require_login()
 	job = _get_job_for_user(job_name)
-	return _job_payload(job)
+	return _job_detail_payload(job)
+
+
+@frappe.whitelist()
+def get_job_detail(job_name: str):
+	_require_login()
+	job = _get_job_for_user(job_name)
+	return _job_detail_payload(job)
 
 
 @frappe.whitelist()
@@ -355,6 +368,8 @@ def get_page_settings():
 		"display_currency": _get_display_currency(),
 		"credit_management_enabled": is_credit_management_enabled(),
 		"credit_type": get_audio_credit_type() if is_credit_management_enabled() else None,
+		"accepted_file_types": "MP3, WAV, M4A, FLAC, OGG, AAC",
+		"is_system_manager": _is_system_manager(),
 	}
 
 

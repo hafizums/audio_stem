@@ -256,6 +256,105 @@ bench restart
 bench --site <your-site> run-tests --app audio_stem
 ```
 
+## Milestone 6
+
+SPA polish, job detail visibility, notifications, onboarding, configuration checklist, and production readiness.
+
+**Current route:** `/audio-vocal-remover` (website SPA). The old Desk route `/app/audio-vocal-remover` is not used.
+
+**Note:** Payment/top-up is intentionally not implemented yet.
+
+### Features
+
+- Job detail panel with previews, downloads, ZIP, retry, timestamps, and cleanup notes
+- `get_job_detail` API (owner or System Manager)
+- Notification settings: `notify_user_on_completion`, `notify_user_on_failure`
+- Safe email + Notification Log on completion/failure
+- Onboarding copy, empty states, and progress messaging on the SPA
+- Mobile-responsive layout for upload, table, detail panel, and buttons
+- System Manager configuration checklist API and SPA admin section
+- Production README with setup checklist and troubleshooting
+
+### Notification settings
+
+| Field | Default | Purpose |
+| --- | --- | --- |
+| `notify_user_on_completion` | 0 | Email + in-app notification when a job completes |
+| `notify_user_on_failure` | 0 | Email + in-app notification when a job fails |
+
+Notifications include the job name and a link to `/audio-vocal-remover` only. No API keys or tracebacks are sent.
+
+### Configuration checklist
+
+System Manager API:
+
+```python
+frappe.call("audio_stem.api.admin.get_configuration_checklist")
+```
+
+Or from bench:
+
+```bash
+bench --site <your-site> execute audio_stem.api.admin.get_configuration_checklist
+```
+
+The SPA shows this checklist at the bottom of `/audio-vocal-remover` for System Manager users only.
+
+### Setup checklist
+
+1. Install `audio_stem` on the site and run `bench migrate`.
+2. Open **Audio Separation Settings** and set `enabled = 1`.
+3. Configure the **WaveSpeed API Key** (server-side only).
+4. Set `max_file_size_mb` and `max_audio_duration_seconds`.
+5. Optionally enable `store_outputs_locally` so provider URLs are copied to private Frappe files.
+6. Optionally enable cleanup fields and confirm the daily scheduler is active (`bench doctor` / scheduler enabled).
+7. If using credits, install `credit_management`, create a credit type, grant credits manually, then enable `credit_management_enabled`.
+8. Build the SPA: `cd apps/audio_stem && yarn build && bench build --app audio_stem`.
+9. Run the configuration checklist as System Manager.
+
+### Manual test (Milestone 6)
+
+```bash
+cd /path/to/frappe-bench
+bench --site <your-site> migrate
+cd apps/audio_stem && yarn build
+bench build --app audio_stem
+bench --site <your-site> clear-cache
+bench restart
+bench --site <your-site> run-tests --app audio_stem
+```
+
+1. Open `/audio-vocal-remover`.
+2. Confirm the upload panel shows max file size, max duration, and accepted file types.
+3. Upload and complete a short MP3.
+4. Open a job from Recent Jobs and confirm the job detail panel shows previews and metadata.
+5. Generate ZIP and confirm download works.
+6. Enable `notify_user_on_completion`, run another job, and confirm notification/email is sent.
+7. Force a failed job with `notify_user_on_failure` enabled and confirm the message is safe.
+8. Test mobile width in browser dev tools.
+9. Log in as System Manager and confirm the configuration checklist appears with no secrets.
+10. Log in as a normal user and confirm the admin checklist is hidden.
+11. Run the full test suite.
+
+### Troubleshooting
+
+| Symptom | Likely cause | What to check |
+| --- | --- | --- |
+| Job stuck in `Queued` | Background worker not running | `bench doctor`, Redis/queue, `bench worker --queue long` |
+| Missing worker / no processing | Scheduler or worker down | `bench restart`, confirm long queue worker |
+| Insufficient credits | Balance too low | Grant credits in Credit Management; check `credit_status` |
+| WaveSpeed API key missing | Settings not configured | Configuration checklist; set key in Audio Separation Settings |
+| Duration cannot be detected | Unsupported/corrupt audio | Re-upload MP3/WAV; check file metadata |
+| ZIP failed | External URLs expired or files removed | Enable `store_outputs_locally`; retry ZIP on completed job |
+| Cleanup did not delete files | Cleanup disabled or retention not reached | `cleanup_enabled`, `retention_days`, job age |
+| User did not receive notification | Notifications disabled or email not configured | `notify_user_on_*` flags, site email settings, Error Log |
+
+### Run tests
+
+```bash
+bench --site <your-site> run-tests --app audio_stem
+```
+
 #### License
 
 MIT

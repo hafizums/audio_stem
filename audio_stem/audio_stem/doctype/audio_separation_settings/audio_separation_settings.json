@@ -18,6 +18,9 @@
   "retention_days",
   "delete_original_after_completion",
   "delete_outputs_after_retention",
+  "section_break_notifications",
+  "notify_user_on_completion",
+  "notify_user_on_failure",
   "section_break_credits",
   "credit_management_enabled",
   "credit_type",
@@ -107,6 +110,23 @@
    "fieldname": "delete_outputs_after_retention",
    "fieldtype": "Check",
    "label": "Delete Outputs After Retention"
+  },
+  {
+   "fieldname": "section_break_notifications",
+   "fieldtype": "Section Break",
+   "label": "Notifications"
+  },
+  {
+   "default": "0",
+   "fieldname": "notify_user_on_completion",
+   "fieldtype": "Check",
+   "label": "Notify User On Completion"
+  },
+  {
+   "default": "0",
+   "fieldname": "notify_user_on_failure",
+   "fieldtype": "Check",
+   "label": "Notify User On Failure"
   },
   {
    "fieldname": "section_break_credits",
