@@ -2,12 +2,14 @@
 # License: MIT. See LICENSE
 
 import os
+from mimetypes import guess_type
 
 import frappe
 from frappe import _
 from frappe.utils import cint, flt
 
 from audio_stem.utils.audio import get_audio_duration_seconds
+from audio_stem.utils.errors import safe_error_message
 from audio_stem.utils.limits import (
 	ACTIVE_STATUSES,
 	STARTABLE_STATUSES,
@@ -24,6 +26,20 @@ from audio_stem.utils.limits import (
 PROVIDER = "WaveSpeed"
 PROVIDER_MODEL = "wavespeed-ai/audio-vocal-isolator"
 DEFAULT_DISPLAY_CURRENCY = "MYR"
+ALLOWED_AUDIO_EXTENSIONS = (".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac")
+ALLOWED_AUDIO_MIMETYPES = {
+	"audio/mpeg",
+	"audio/mp3",
+	"audio/wav",
+	"audio/x-wav",
+	"audio/mp4",
+	"audio/x-m4a",
+	"audio/flac",
+	"audio/ogg",
+	"application/ogg",
+	"audio/aac",
+	"audio/x-aac",
+}
 
 
 def _get_display_currency() -> str:
@@ -56,6 +72,48 @@ def _get_attached_file_doc(file_url: str):
 	if not file_name:
 		frappe.throw(_("Uploaded file not found"))
 	return frappe.get_doc("File", file_name)
+
+
+def _credit_settings_flag_enabled() -> bool:
+	return bool(cint(get_settings().credit_management_enabled))
+
+
+def _check_credit_integration_ready():
+	if _credit_settings_flag_enabled():
+		from audio_stem.integrations.credit_management_client import credit_management_available
+
+		if not credit_management_available():
+			frappe.throw(
+				_("Credit Management is enabled but the credit_management app is not installed."),
+				frappe.ValidationError,
+			)
+
+
+def _credit_blocked_reason(job, settings=None) -> str | None:
+	if not _credit_settings_flag_enabled():
+		return None
+
+	from audio_stem.integrations.credit_management_client import (
+		credit_management_available,
+		get_audio_credit_type,
+		get_user_credit_balance,
+	)
+
+	if not credit_management_available():
+		return _("Credit Management is enabled but the credit_management app is not installed.")
+
+	try:
+		credit_type = get_audio_credit_type()
+		balance = get_user_credit_balance(job.user, credit_type)
+		cost = calculate_provider_cost(job.duration_seconds, settings or get_settings())
+		if flt(balance.get("available_balance")) < flt(cost):
+			return _("Insufficient available credits for this separation job.")
+	except frappe.ValidationError:
+		raise
+	except Exception:
+		return _("Unable to verify credit balance.")
+
+	return None
 
 
 def _can_start_job(job, settings=None) -> tuple[bool, str | None]:
@@ -91,11 +149,16 @@ def _can_start_job(job, settings=None) -> tuple[bool, str | None]:
 	if not _is_system_manager() and user_has_other_active_job(job.user, exclude_job_name=job.name):
 		return False, _("You already have an active separation job. Please wait for it to finish.")
 
+	credit_reason = _credit_blocked_reason(job, settings)
+	if credit_reason:
+		return False, credit_reason
+
 	return True, None
 
 
 def _job_payload(job):
 	can_start, blocked_reason = _can_start_job(job)
+	credit_enabled = _credit_settings_flag_enabled()
 	return {
 		"name": job.name,
 		"status": job.status,
@@ -111,6 +174,13 @@ def _job_payload(job):
 		"can_start": can_start,
 		"start_blocked_reason": blocked_reason,
 		"is_active": job.status in ACTIVE_STATUSES,
+		"credit_management_enabled": credit_enabled,
+		"credit_status": job.credit_status,
+		"credit_reservation": job.credit_reservation,
+		"reserved_amount": flt(job.reserved_amount),
+		"consumed_amount": flt(job.consumed_amount),
+		"credit_type": job.credit_type,
+		"credit_error": job.credit_error,
 	}
 
 
@@ -119,6 +189,57 @@ def _resolve_original_filename(file_url: str) -> str | None:
 	if file_name:
 		return file_name
 	return os.path.basename(file_url) if file_url else None
+
+
+def _validate_audio_upload(filename: str, content_type: str | None = None):
+	ext = os.path.splitext(filename or "")[1].lower()
+	mime = (content_type or guess_type(filename)[0] or "").lower()
+
+	if ext in ALLOWED_AUDIO_EXTENSIONS:
+		return
+	if mime in ALLOWED_AUDIO_MIMETYPES:
+		return
+
+	frappe.throw(_("Please upload a supported audio file (MP3, WAV, M4A, FLAC, OGG, AAC)."))
+
+
+def _save_uploaded_audio(upload) -> dict:
+	settings = get_settings()
+	ensure_enabled(settings)
+
+	filename = upload.filename
+	if not filename:
+		frappe.throw(_("No file uploaded"))
+
+	content = upload.stream.read()
+	_validate_audio_upload(filename, upload.content_type)
+
+	file_doc = frappe.get_doc(
+		{
+			"doctype": "File",
+			"file_name": filename,
+			"is_private": 1,
+			"content": content,
+		}
+	)
+	file_doc.save(ignore_permissions=True)
+	validate_file_size(file_doc, settings)
+
+	return {
+		"file_url": file_doc.file_url,
+		"file_name": file_doc.file_name,
+	}
+
+
+@frappe.whitelist()
+def upload_audio_file():
+	_require_login()
+
+	files = frappe.request.files
+	if "file" not in files:
+		frappe.throw(_("No file uploaded"))
+
+	return _save_uploaded_audio(files["file"])
 
 
 @frappe.whitelist()
@@ -143,6 +264,8 @@ def create_job_from_file(file_url: str):
 	if duration_seconds:
 		validate_duration(duration_seconds, settings)
 
+	from audio_stem.integrations.credit_management_client import is_credit_management_enabled
+
 	job = frappe.get_doc(
 		{
 			"doctype": "Audio Separation Job",
@@ -151,6 +274,7 @@ def create_job_from_file(file_url: str):
 			"original_file": file_url,
 			"original_filename": _resolve_original_filename(file_url),
 			"duration_seconds": duration_seconds,
+			"credit_status": "Pending" if is_credit_management_enabled() else "Not Required",
 		}
 	)
 	job.insert(ignore_permissions=True)
@@ -168,11 +292,51 @@ def get_job_status(job_name: str):
 @frappe.whitelist()
 def get_page_settings():
 	_require_login()
+	from audio_stem.integrations.credit_management_client import get_audio_credit_type, is_credit_management_enabled
+
 	limits = get_limits_payload()
 	return {
 		**limits,
 		"display_currency": _get_display_currency(),
+		"credit_management_enabled": is_credit_management_enabled(),
+		"credit_type": get_audio_credit_type() if is_credit_management_enabled() else None,
 	}
+
+
+@frappe.whitelist()
+def get_my_credit_balance():
+	_require_login()
+	from audio_stem.integrations.credit_management_client import (
+		credit_management_available,
+		get_audio_credit_type,
+		get_user_credit_balance,
+		is_credit_management_enabled,
+	)
+
+	if not is_credit_management_enabled():
+		return {"enabled": False}
+
+	if not credit_management_available():
+		return {
+			"enabled": True,
+			"error": _("Credit Management is enabled but the credit_management app is not installed."),
+		}
+
+	try:
+		balance = get_user_credit_balance(frappe.session.user)
+		return {
+			"enabled": True,
+			"credit_type": get_audio_credit_type(),
+			"current_balance": flt(balance.get("current_balance")),
+			"reserved_balance": flt(balance.get("reserved_balance")),
+			"available_balance": flt(balance.get("available_balance")),
+		}
+	except Exception as exc:
+		return {
+			"enabled": True,
+			"credit_type": get_audio_credit_type(),
+			"error": safe_error_message(exc),
+		}
 
 
 @frappe.whitelist()
@@ -207,12 +371,7 @@ def start_separation(job_name: str):
 	settings = get_settings()
 
 	if job.status in ACTIVE_STATUSES:
-		return {
-			"status": job.status,
-			"name": job.name,
-			"already_active": True,
-			"provider_cost_usd": flt(job.provider_cost_usd),
-		}
+		return {**_job_payload(job), "already_active": True}
 
 	if job.status == "Completed":
 		frappe.throw(_("This job is already completed."))
@@ -221,6 +380,7 @@ def start_separation(job_name: str):
 		frappe.throw(_("Job can only be started from Draft or Failed status."))
 
 	ensure_enabled(settings)
+	_check_credit_integration_ready()
 
 	if not job.original_file:
 		frappe.throw(_("Please attach an audio file before starting separation."))
@@ -233,6 +393,29 @@ def start_separation(job_name: str):
 		ensure_single_active_job(job.user, exclude_job_name=job.name)
 
 	job.provider_cost_usd = calculate_provider_cost(job.duration_seconds, settings)
+
+	from audio_stem.integrations.credit_management_client import (
+		is_credit_management_enabled,
+		release_job_reservation,
+		reserve_job_credits,
+	)
+
+	if is_credit_management_enabled():
+		if job.credit_status in ("Released", "Failed"):
+			job.credit_reservation = None
+			job.reserved_amount = 0
+			job.consumed_amount = 0
+			job.credit_error = None
+
+		reserve_job_credits(job)
+	else:
+		job.credit_status = "Not Required"
+		job.credit_reservation = None
+		job.reserved_amount = 0
+		job.consumed_amount = 0
+		job.credit_type = None
+		job.credit_error = None
+
 	job.status = "Queued"
 	job.provider = PROVIDER
 	job.provider_model = PROVIDER_MODEL
@@ -245,16 +428,25 @@ def start_separation(job_name: str):
 	job.completed_at = None
 	job.save(ignore_permissions=True)
 
-	frappe.enqueue(
-		"audio_stem.workers.separation_worker.process_audio_separation",
-		queue="long",
-		job_id=f"audio_separation:{job.name}",
-		name=job.name,
-	)
+	try:
+		frappe.enqueue(
+			"audio_stem.workers.separation_worker.process_audio_separation",
+			queue="long",
+			job_id=f"audio_separation:{job.name}",
+			name=job.name,
+		)
+	except Exception as exc:
+		if is_credit_management_enabled() and job.credit_reservation and job.credit_status == "Reserved":
+			try:
+				release_job_reservation(job, reason="Failed to enqueue separation job")
+				job.save(ignore_permissions=True)
+			except Exception as release_exc:
+				job.credit_error = safe_error_message(release_exc)
+				job.save(ignore_permissions=True)
+				frappe.log_error(
+					title=f"Credit release failed after enqueue error for {job.name}",
+					message=frappe.get_traceback(),
+				)
+		raise exc
 
-	return {
-		"status": job.status,
-		"name": job.name,
-		"provider_cost_usd": flt(job.provider_cost_usd),
-		"already_active": False,
-	}
+	return {**_job_payload(job), "already_active": False}

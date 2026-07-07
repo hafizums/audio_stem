@@ -12,7 +12,11 @@
   "column_break_1",
   "cost_per_second_usd",
   "display_currency",
-  "store_outputs_locally"
+  "store_outputs_locally",
+  "section_break_credits",
+  "credit_management_enabled",
+  "credit_type",
+  "credit_owner_doctype"
  ],
  "fields": [
   {
@@ -68,6 +72,29 @@
    "fieldname": "store_outputs_locally",
    "fieldtype": "Check",
    "label": "Store Outputs Locally"
+  },
+  {
+   "fieldname": "section_break_credits",
+   "fieldtype": "Section Break",
+   "label": "Credit Integration"
+  },
+  {
+   "default": "0",
+   "fieldname": "credit_management_enabled",
+   "fieldtype": "Check",
+   "label": "Credit Management Enabled"
+  },
+  {
+   "default": "AUDIO_STEM",
+   "fieldname": "credit_type",
+   "fieldtype": "Data",
+   "label": "Credit Type"
+  },
+  {
+   "default": "User",
+   "fieldname": "credit_owner_doctype",
+   "fieldtype": "Data",
+   "label": "Credit Owner DocType"
   }
  ],
  "issingle": 1,

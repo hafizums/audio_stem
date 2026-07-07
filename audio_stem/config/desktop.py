@@ -7,10 +7,4 @@ def get_data():
 			"type": "module",
 			"label": _("Audio Stem")
 		},
-		{
-			"type": "page",
-			"name": "audio-vocal-remover",
-			"label": _("Audio Vocal Remover"),
-			"link": "audio-vocal-remover",
-		},
 	]

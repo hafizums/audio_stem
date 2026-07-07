@@ -1,0 +1,24 @@
+{
+  "name": "audio-vocal-remover",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build --base=/assets/audio_stem/audio-vocal-remover/ && yarn copy-html-entry",
+    "preview": "vite preview",
+    "copy-html-entry": "cp ../audio_stem/public/audio-vocal-remover/index.html ../audio_stem/www/audio-vocal-remover.html"
+  },
+  "dependencies": {
+    "frappe-react-sdk": "^1.17.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.3",
+    "autoprefixer": "^10.5.2",
+    "postcss": "^8.5.16",
+    "tailwindcss": "^3.4.19",
+    "vite": "^8.1.1"
+  }
+}

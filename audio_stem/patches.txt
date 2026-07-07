@@ -1,0 +1,4 @@
+[pre_model_sync]
+
+[post_model_sync]
+audio_stem.patches.v1_0.remove_desk_audio_vocal_remover_page

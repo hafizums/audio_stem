@@ -1,0 +1,88 @@
+{
+ "charts": [],
+ "content": "[{\"id\": \"as-header\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Audio Stem</b></span>\", \"col\": 12}}, {\"id\": \"as-desc\", \"type\": \"paragraph\", \"data\": {\"text\": \"Upload audio and separate vocals from instrumentals using WaveSpeed.\", \"col\": 12}}, {\"id\": \"as-shortcuts-header\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Shortcuts</b></span>\", \"col\": 12}}, {\"id\": \"as-sc-0\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Audio Vocal Remover\", \"col\": 4}}, {\"id\": \"as-sc-1\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Audio Separation Job\", \"col\": 4}}, {\"id\": \"as-sc-2\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Audio Separation Settings\", \"col\": 4}}, {\"id\": \"as-modules-header\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Modules</b></span>\", \"col\": 12}}, {\"id\": \"as-card-0\", \"type\": \"card\", \"data\": {\"card_name\": \"Separation\", \"col\": 6}}, {\"id\": \"as-card-1\", \"type\": \"card\", \"data\": {\"card_name\": \"Settings\", \"col\": 6}}]",
+ "creation": "2026-07-06 00:00:00",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "music",
+ "idx": 0,
+ "is_hidden": 0,
+ "label": "Audio Stem",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Separation",
+   "link_count": 1,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Audio Separation Job",
+   "link_count": 0,
+   "link_to": "Audio Separation Job",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Settings",
+   "link_count": 1,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Audio Separation Settings",
+   "link_count": 0,
+   "link_to": "Audio Separation Settings",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-07-06 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Audio Stem",
+ "name": "Audio Stem",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "restrict_to_domain": "",
+ "roles": [],
+ "sequence_id": 25.0,
+ "shortcuts": [
+  {
+   "color": "Blue",
+   "doc_view": "",
+   "label": "Audio Vocal Remover",
+   "type": "URL",
+   "url": "/audio-vocal-remover"
+  },
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "label": "Audio Separation Job",
+   "link_to": "Audio Separation Job",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Audio Separation Settings",
+   "link_to": "Audio Separation Settings",
+   "type": "DocType"
+  }
+ ],
+ "title": "Audio Stem"
+}

@@ -213,3 +213,7 @@ app_license = "MIT"
 # auth_hooks = [
 # 	"audio_stem.auth.validate"
 # ]
+
+website_route_rules = [
+	{"from_route": "/audio-vocal-remover/<path:app_path>", "to_route": "audio-vocal-remover"},
+]

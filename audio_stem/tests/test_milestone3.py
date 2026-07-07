@@ -24,6 +24,7 @@ class TestAudioSeparationMilestone3(FrappeTestCase):
 			"max_audio_duration_seconds": settings.max_audio_duration_seconds,
 			"cost_per_second_usd": settings.cost_per_second_usd,
 			"store_outputs_locally": settings.store_outputs_locally,
+			"credit_management_enabled": settings.credit_management_enabled,
 		}
 		settings.enabled = 1
 		settings.wavespeed_api_key = "test-api-key"
@@ -31,6 +32,7 @@ class TestAudioSeparationMilestone3(FrappeTestCase):
 		settings.max_audio_duration_seconds = 600
 		settings.cost_per_second_usd = 0.001
 		settings.store_outputs_locally = 0
+		settings.credit_management_enabled = 0
 		settings.save(ignore_permissions=True)
 		frappe.set_user("Administrator")
 

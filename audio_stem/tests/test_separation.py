@@ -4,12 +4,15 @@
 import os
 import tempfile
 import uuid
+from io import BytesIO
 from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from werkzeug.datastructures import FileStorage
 
 from audio_stem.api.separation import (
+	_save_uploaded_audio,
 	create_job_from_file,
 	get_job_status,
 	get_recent_jobs,
@@ -24,14 +27,17 @@ class TestAudioSeparation(FrappeTestCase):
 		settings = frappe.get_single("Audio Separation Settings")
 		self._saved_enabled = settings.enabled
 		self._saved_api_key = settings.get_password("wavespeed_api_key", raise_exception=False)
+		self._saved_credit_enabled = settings.credit_management_enabled
 		settings.enabled = 1
 		settings.wavespeed_api_key = "test-api-key"
+		settings.credit_management_enabled = 0
 		settings.save(ignore_permissions=True)
 
 	def tearDown(self):
 		settings = frappe.get_single("Audio Separation Settings")
 		settings.enabled = self._saved_enabled
 		settings.wavespeed_api_key = self._saved_api_key or ""
+		settings.credit_management_enabled = self._saved_credit_enabled
 		settings.save(ignore_permissions=True)
 
 	def _create_job(self, with_file: bool = True):
@@ -160,6 +166,30 @@ class TestAudioSeparationPageAPI(FrappeTestCase):
 		file_doc.save(ignore_permissions=True)
 		os.unlink(tmp_path)
 		return file_doc.file_url
+
+	def _mock_audio_upload(self, user: str, filename: str = "sample.mp3"):
+		frappe.set_user(user)
+		upload = FileStorage(
+			stream=BytesIO(b"fake-audio-content"),
+			filename=filename,
+			content_type="audio/mpeg",
+		)
+		return _save_uploaded_audio(upload)
+
+	def test_upload_audio_file_rejects_non_audio(self):
+		frappe.set_user(self.user_a)
+		upload = FileStorage(
+			stream=BytesIO(b"not-audio"),
+			filename="notes.txt",
+			content_type="text/plain",
+		)
+		with self.assertRaises(frappe.ValidationError):
+			_save_uploaded_audio(upload)
+
+	def test_upload_audio_file_returns_file_url(self):
+		result = self._mock_audio_upload(self.user_a)
+		self.assertTrue(result["file_url"])
+		self.assertEqual(result["file_name"], "sample.mp3")
 
 	def test_create_job_from_file_requires_login(self):
 		frappe.set_user("Guest")

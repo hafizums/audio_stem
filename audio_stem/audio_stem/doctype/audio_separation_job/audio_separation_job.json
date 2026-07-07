@@ -15,6 +15,13 @@
   "provider",
   "provider_model",
   "provider_cost_usd",
+  "section_break_credits",
+  "credit_status",
+  "credit_reservation",
+  "reserved_amount",
+  "consumed_amount",
+  "credit_type",
+  "credit_error",
   "section_break_outputs",
   "vocal_output_url",
   "instrumental_output_url",
@@ -88,6 +95,49 @@
    "fieldname": "provider_cost_usd",
    "fieldtype": "Currency",
    "label": "Provider Cost (USD)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_credits",
+   "fieldtype": "Section Break",
+   "label": "Credits"
+  },
+  {
+   "default": "Not Required",
+   "fieldname": "credit_status",
+   "fieldtype": "Select",
+   "label": "Credit Status",
+   "options": "Not Required\nPending\nReserved\nConsumed\nReleased\nFailed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "credit_reservation",
+   "fieldtype": "Data",
+   "label": "Credit Reservation",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reserved_amount",
+   "fieldtype": "Currency",
+   "label": "Reserved Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "consumed_amount",
+   "fieldtype": "Currency",
+   "label": "Consumed Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "credit_type",
+   "fieldtype": "Data",
+   "label": "Credit Type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "credit_error",
+   "fieldtype": "Small Text",
+   "label": "Credit Error",
    "read_only": 1
   },
   {

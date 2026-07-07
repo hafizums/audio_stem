@@ -1,0 +1,11 @@
+{
+  "name": "audio_stem",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Audio Stem Frappe app",
+  "scripts": {
+    "postinstall": "cd audio-vocal-remover && yarn install",
+    "dev": "cd audio-vocal-remover && yarn dev",
+    "build": "cd audio-vocal-remover && yarn build"
+  }
+}

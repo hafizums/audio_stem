@@ -16,7 +16,19 @@ Internal MVP implemented:
 
 ## Milestone 2
 
-User-facing Desk page at `/app/audio-vocal-remover`:
+User-facing vocal remover UI:
+
+- **Dedicated website (Doppio SPA):** `/audio-vocal-remover`
+
+Build the dedicated page:
+
+```bash
+cd apps/audio_stem && yarn build
+bench build --app audio_stem
+bench --site <your-site> clear-cache
+```
+
+Dev server: `cd apps/audio_stem && yarn dev` then open `http://<site>:8080/audio-vocal-remover`
 
 - Upload audio and create a job
 - Start separation and poll job status
@@ -34,7 +46,7 @@ Cost-control, validation, retention, and safer processing:
 - Idempotent `start_separation` for active/completed jobs
 - Safe user-facing `error_message` with full tracebacks in Error Log only
 - Optional local output storage via `store_outputs_locally`
-- Improved limits and blocked-start messaging on the Desk page
+- Improved limits and blocked-start messaging on the vocal remover page
 
 ### Settings
 
@@ -59,7 +71,7 @@ bench restart
 ```
 
 1. Open **Audio Separation Settings** and confirm limits, display currency, and API key.
-2. Open `/app/audio-vocal-remover` and confirm max file size / max duration are shown.
+2. Open `/audio-vocal-remover` and confirm max file size / max duration are shown.
 3. Upload a valid audio file and confirm estimated provider cost appears.
 4. Start separation and confirm `provider_cost_usd` is saved before the worker runs.
 5. Try double-clicking **Start Separation** and confirm only one queue job is created.
@@ -70,7 +82,66 @@ bench restart
 
 ### Known limitation
 
-There is still **no payment or credit system**. Provider cost fields are informational controls only.
+When `credit_management_enabled` is off, provider cost fields remain informational only.
+
+## Milestone 4
+
+Credit integration with the separate `credit_management` app:
+
+- Optional credit reservation before queueing, consume on success, release on failure
+- Integration settings on **Audio Separation Settings**
+- Credit fields on **Audio Separation Job**
+- Vocal remover page balance display and insufficient-credit blocking
+- All balance changes go through `credit_management.api` only (never mutate ledger rows from `audio_stem`)
+
+**Warning:** Do not insert or update `Credit Account` or `Credit Ledger Entry` directly from `audio_stem`. Use only:
+
+```python
+import credit_management.api as credit_api
+```
+
+### Required dependency
+
+Install `credit_management` on the same Frappe site before enabling credit integration.
+
+### Enable credit integration
+
+1. Ensure `credit_management` is installed and has a credit type (preferably `AUDIO_STEM`).
+2. Grant credits to users via Credit Management admin tools.
+3. Open **Audio Separation Settings** and set:
+   - `credit_management_enabled = 1`
+   - `credit_type` (default `AUDIO_STEM`)
+   - `credit_owner_doctype` (default `User`)
+
+When disabled, internal testing can continue without credits.
+
+### Credit settings fields
+
+| Field | Purpose |
+| --- | --- |
+| `credit_management_enabled` | Master switch for credit checks and reservations |
+| `credit_type` | Credit type code passed to `credit_management.api` |
+| `credit_owner_doctype` | Owner DocType for balances (default `User`) |
+
+### Manual test (Milestone 4)
+
+```bash
+cd /path/to/frappe-bench
+bench --site <your-site> migrate
+bench --site <your-site> clear-cache
+bench build --app audio_stem
+bench restart
+```
+
+1. Install both `audio_stem` and `credit_management` on the site.
+2. Ensure `credit_management` has a credit type, preferably `AUDIO_STEM`.
+3. Grant credits to a test user using Credit Management admin tools.
+4. Enable `credit_management_enabled` in **Audio Separation Settings**.
+5. Upload a short MP3 as the test user on `/audio-vocal-remover`.
+6. Confirm available balance and estimated job cost are shown.
+7. Start separation and confirm credits are reserved (`credit_status = Reserved`).
+8. Wait for completion and confirm credits are consumed (`credit_status = Consumed`).
+9. Test a failure path (for example invalid API key) and confirm the reservation is released (`credit_status = Released`).
 
 ### Run tests
 
