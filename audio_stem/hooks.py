@@ -127,23 +127,11 @@ app_license = "MIT"
 # Scheduled Tasks
 # ---------------
 
-# scheduler_events = {
-# 	"all": [
-# 		"audio_stem.tasks.all"
-# 	],
-# 	"daily": [
-# 		"audio_stem.tasks.daily"
-# 	],
-# 	"hourly": [
-# 		"audio_stem.tasks.hourly"
-# 	],
-# 	"weekly": [
-# 		"audio_stem.tasks.weekly"
-# 	],
-# 	"monthly": [
-# 		"audio_stem.tasks.monthly"
-# 	],
-# }
+scheduler_events = {
+	"daily": [
+		"audio_stem.utils.cleanup.cleanup_old_audio_jobs",
+	],
+}
 
 # Testing
 # -------

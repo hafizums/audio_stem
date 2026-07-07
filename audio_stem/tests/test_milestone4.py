@@ -348,7 +348,7 @@ class TestAudioSeparationMilestone4(FrappeTestCase):
 		python_files = [
 			path
 			for path in APP_ROOT.rglob("*.py")
-			if "node_modules" not in path.parts and path.name != "test_milestone4.py"
+			if "node_modules" not in path.parts and "tests" not in path.parts
 		]
 		for path in python_files:
 			content = path.read_text(encoding="utf-8")

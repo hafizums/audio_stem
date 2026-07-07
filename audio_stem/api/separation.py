@@ -116,7 +116,35 @@ def _credit_blocked_reason(job, settings=None) -> str | None:
 	return None
 
 
-def _can_start_job(job, settings=None) -> tuple[bool, str | None]:
+def _has_vocal_output(job) -> bool:
+	return bool(job.vocal_output_url or job.vocal_file)
+
+
+def _has_instrumental_output(job) -> bool:
+	return bool(job.instrumental_output_url or job.instrumental_file)
+
+
+def _has_zip_output(job) -> bool:
+	if not job.get("zip_file"):
+		return False
+	return bool(_zip_file_exists(job.zip_file))
+
+
+def _zip_file_exists(file_url: str) -> bool:
+	from audio_stem.utils.files import resolve_frappe_file_path
+
+	return bool(resolve_frappe_file_path(file_url))
+
+
+def _can_download_zip(job) -> bool:
+	if job.status != "Completed":
+		return False
+	if _has_zip_output(job):
+		return True
+	return _has_vocal_output(job) and _has_instrumental_output(job)
+
+
+def _validate_job_for_queue(job, settings=None) -> tuple[bool, str | None]:
 	settings = settings or get_settings()
 
 	if not cint(settings.enabled):
@@ -124,12 +152,6 @@ def _can_start_job(job, settings=None) -> tuple[bool, str | None]:
 
 	if job.status in ACTIVE_STATUSES:
 		return False, _("This job is already running.")
-
-	if job.status == "Completed":
-		return False, _("This job is already completed.")
-
-	if job.status not in STARTABLE_STATUSES:
-		return False, _("This job cannot be started.")
 
 	if not job.original_file:
 		return False, _("Please attach an audio file before starting separation.")
@@ -156,8 +178,31 @@ def _can_start_job(job, settings=None) -> tuple[bool, str | None]:
 	return True, None
 
 
+def _can_start_job(job, settings=None) -> tuple[bool, str | None]:
+	settings = settings or get_settings()
+
+	if job.status == "Completed":
+		return False, _("This job is already completed.")
+
+	if job.status == "Failed":
+		return False, _("Use Retry to run this failed job again.")
+
+	if job.status not in STARTABLE_STATUSES:
+		return False, _("This job cannot be started.")
+
+	return _validate_job_for_queue(job, settings)
+
+
+def _can_retry_job(job, settings=None) -> tuple[bool, str | None]:
+	if job.status != "Failed":
+		return False, _("Only failed jobs can be retried.")
+
+	return _validate_job_for_queue(job, settings or get_settings())
+
+
 def _job_payload(job):
 	can_start, blocked_reason = _can_start_job(job)
+	can_retry, retry_blocked_reason = _can_retry_job(job)
 	credit_enabled = _credit_settings_flag_enabled()
 	return {
 		"name": job.name,
@@ -166,13 +211,23 @@ def _job_payload(job):
 		"original_filename": job.original_filename,
 		"vocal_output_url": job.vocal_output_url,
 		"instrumental_output_url": job.instrumental_output_url,
+		"vocal_file": job.vocal_file,
+		"instrumental_file": job.instrumental_file,
+		"zip_file": job.get("zip_file"),
 		"error_message": job.error_message,
 		"duration_seconds": cint(job.duration_seconds),
 		"provider_cost_usd": flt(job.provider_cost_usd),
 		"estimated_cost_usd": calculate_provider_cost(job.duration_seconds),
 		"display_currency": _get_display_currency(),
+		"completed_at": job.completed_at,
+		"creation": job.creation,
 		"can_start": can_start,
 		"start_blocked_reason": blocked_reason,
+		"can_retry": can_retry,
+		"retry_blocked_reason": retry_blocked_reason,
+		"can_zip": _can_download_zip(job),
+		"has_vocal": _has_vocal_output(job),
+		"has_instrumental": _has_instrumental_output(job),
 		"is_active": job.status in ACTIVE_STATUSES,
 		"credit_management_enabled": credit_enabled,
 		"credit_status": job.credit_status,
@@ -343,42 +398,69 @@ def get_my_credit_balance():
 def get_recent_jobs(limit=10):
 	_require_login()
 	limit = min(cint(limit) or 10, 50)
+	credit_enabled = _credit_settings_flag_enabled()
 
 	filters = {"user": frappe.session.user}
+	fields = [
+		"name",
+		"user",
+		"original_file",
+		"status",
+		"creation",
+		"completed_at",
+		"duration_seconds",
+		"provider_cost_usd",
+		"original_filename",
+		"vocal_output_url",
+		"instrumental_output_url",
+		"vocal_file",
+		"instrumental_file",
+		"zip_file",
+		"error_message",
+	]
+	if credit_enabled:
+		fields.append("credit_status")
 
 	jobs = frappe.get_all(
 		"Audio Separation Job",
 		filters=filters,
-		fields=[
-			"name",
-			"status",
-			"creation",
-			"duration_seconds",
-			"vocal_output_url",
-			"instrumental_output_url",
-		],
+		fields=fields,
 		order_by="creation desc",
 		limit=limit,
 		ignore_permissions=True,
 	)
-	return jobs
+
+	rows = []
+	for row in jobs:
+		job = frappe._dict(row)
+		can_retry, _ = _can_retry_job(job)
+		rows.append(
+			{
+				"name": job.name,
+				"original_filename": job.original_filename,
+				"status": job.status,
+				"credit_status": job.credit_status if credit_enabled else None,
+				"duration_seconds": cint(job.duration_seconds),
+				"provider_cost_usd": flt(job.provider_cost_usd),
+				"creation": job.creation,
+				"completed_at": job.completed_at,
+				"has_vocal": _has_vocal_output(job),
+				"has_instrumental": _has_instrumental_output(job),
+				"error_summary": job.error_message if job.status == "Failed" else None,
+				"can_retry": can_retry,
+				"can_zip": _can_download_zip(job),
+			}
+		)
+	return rows
 
 
-@frappe.whitelist()
-def start_separation(job_name: str):
-	_require_login()
-	job = _get_job_for_user(job_name)
-	settings = get_settings()
-
-	if job.status in ACTIVE_STATUSES:
-		return {**_job_payload(job), "already_active": True}
-
-	if job.status == "Completed":
-		frappe.throw(_("This job is already completed."))
-
-	if job.status not in STARTABLE_STATUSES:
-		frappe.throw(_("Job can only be started from Draft or Failed status."))
-
+def _prepare_and_queue_job(
+	job,
+	settings,
+	*,
+	preserve_outputs: bool = False,
+	enqueue_failure_status: str = "Draft",
+):
 	ensure_enabled(settings)
 	_check_credit_integration_ready()
 
@@ -420,10 +502,12 @@ def start_separation(job_name: str):
 	job.provider = PROVIDER
 	job.provider_model = PROVIDER_MODEL
 	job.error_message = None
-	job.vocal_output_url = None
-	job.instrumental_output_url = None
-	job.vocal_file = None
-	job.instrumental_file = None
+	job.credit_error = None
+	if not preserve_outputs:
+		job.vocal_output_url = None
+		job.instrumental_output_url = None
+		job.vocal_file = None
+		job.instrumental_file = None
 	job.started_at = None
 	job.completed_at = None
 	job.save(ignore_permissions=True)
@@ -445,9 +529,73 @@ def start_separation(job_name: str):
 					title=f"Credit release failed after enqueue error for {job.name}",
 					message=frappe.get_traceback(),
 				)
-		job.status = "Draft"
+		job.status = enqueue_failure_status
 		job.error_message = safe_error_message(exc)
 		job.save(ignore_permissions=True)
 		raise exc
 
+
+@frappe.whitelist()
+def start_separation(job_name: str):
+	_require_login()
+	job = _get_job_for_user(job_name)
+	settings = get_settings()
+
+	if job.status in ACTIVE_STATUSES:
+		return {**_job_payload(job), "already_active": True}
+
+	if job.status == "Completed":
+		frappe.throw(_("This job is already completed."))
+
+	if job.status != "Draft":
+		if job.status == "Failed":
+			frappe.throw(_("Use retry to run this failed job again."))
+		frappe.throw(_("Job can only be started from Draft status."))
+
+	can_start, blocked_reason = _can_start_job(job, settings)
+	if not can_start:
+		frappe.throw(blocked_reason or _("This job cannot be started."))
+
+	_prepare_and_queue_job(job, settings, preserve_outputs=False, enqueue_failure_status="Draft")
 	return {**_job_payload(job), "already_active": False}
+
+
+@frappe.whitelist()
+def retry_failed_job(job_name: str):
+	_require_login()
+	job = _get_job_for_user(job_name)
+	settings = get_settings()
+
+	if job.status in ACTIVE_STATUSES:
+		return {**_job_payload(job), "already_active": True}
+
+	if job.status != "Failed":
+		frappe.throw(_("Only failed jobs can be retried."))
+
+	can_retry, blocked_reason = _can_retry_job(job, settings)
+	if not can_retry:
+		frappe.throw(blocked_reason or _("This job cannot be retried."))
+
+	_prepare_and_queue_job(
+		job,
+		settings,
+		preserve_outputs=True,
+		enqueue_failure_status="Failed",
+	)
+	return {**_job_payload(job), "already_active": False}
+
+
+@frappe.whitelist()
+def create_job_zip(job_name: str):
+	_require_login()
+	job = _get_job_for_user(job_name)
+
+	if job.status != "Completed":
+		frappe.throw(_("ZIP download is only available for completed jobs."), frappe.ValidationError)
+
+	from audio_stem.utils.zip_download import create_job_zip_file
+
+	zip_url = create_job_zip_file(job)
+	job.zip_file = zip_url
+	job.save(ignore_permissions=True)
+	return {"zip_file": zip_url, "job_name": job.name}

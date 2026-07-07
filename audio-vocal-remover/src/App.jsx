@@ -10,8 +10,12 @@ import {
 	ACTIVE_STATUSES,
 	TERMINAL_STATUSES,
 	formatCost,
+	formatDateTime,
 	getEstimatedCost,
+	getJobStatusMessage,
 	getStartBlockedReason,
+	getStatusBadgeClass,
+	getUploadErrorMessage,
 	isStartDisabled,
 	parseFrappeError,
 	unwrapFrappeMessage,
@@ -23,6 +27,16 @@ function Section({ title, children }) {
 			<h2 className="mb-3 text-base font-semibold text-gray-900">{title}</h2>
 			{children}
 		</section>
+	);
+}
+
+function StatusBadge({ status }) {
+	return (
+		<span
+			className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getStatusBadgeClass(status)}`}
+		>
+			{status}
+		</span>
 	);
 }
 
@@ -47,6 +61,8 @@ function AuthenticatedApp({ currentUser }) {
 	const [jobName, setJobName] = useState(null);
 	const [job, setJob] = useState(null);
 	const [starting, setStarting] = useState(false);
+	const [retrying, setRetrying] = useState(false);
+	const [zipping, setZipping] = useState(false);
 	const [uploading, setUploading] = useState(false);
 	const [error, setError] = useState(null);
 	const pollRef = useRef(null);
@@ -73,6 +89,12 @@ function AuthenticatedApp({ currentUser }) {
 	const { call: startSeparation } = useFrappePostCall(
 		"audio_stem.api.separation.start_separation"
 	);
+	const { call: retryFailedJob } = useFrappePostCall(
+		"audio_stem.api.separation.retry_failed_job"
+	);
+	const { call: createJobZip } = useFrappePostCall(
+		"audio_stem.api.separation.create_job_zip"
+	);
 	const { call: getJobStatus } = useFrappePostCall(
 		"audio_stem.api.separation.get_job_status"
 	);
@@ -91,7 +113,8 @@ function AuthenticatedApp({ currentUser }) {
 		credit,
 		costPerSecond,
 	});
-	const startBlockedReason = getStartBlockedReason({ job, credit, costPerSecond });
+	const startBlockedReason = getStartBlockedReason({ job, credit, costPerSecond, settings });
+	const statusMessage = getJobStatusMessage(job, { starting, retrying, zipping });
 
 	const stopPolling = useCallback(() => {
 		if (pollRef.current) {
@@ -153,14 +176,14 @@ function AuthenticatedApp({ currentUser }) {
 			await refreshRecent();
 			await refreshCredit();
 		} catch (err) {
-			setError(parseFrappeError(err) || err.message || "Failed to upload audio");
+			setError(getUploadErrorMessage(err, settings));
 		} finally {
 			setUploading(false);
 		}
 	};
 
 	const handleStart = async () => {
-		if (!jobName || starting) return;
+		if (!jobName || starting || job?.is_active) return;
 		if (settings?.enabled === 0) {
 			setError("Audio separation is disabled in Audio Separation Settings.");
 			return;
@@ -179,8 +202,48 @@ function AuthenticatedApp({ currentUser }) {
 			await refreshCredit();
 		} catch (err) {
 			setError(parseFrappeError(err) || err.message || "Failed to start separation");
+			await refreshCredit();
 		} finally {
 			setStarting(false);
+		}
+	};
+
+	const handleRetry = async (name) => {
+		if (retrying) return;
+		setRetrying(true);
+		setError(null);
+		try {
+			const result = unwrapFrappeMessage(await retryFailedJob({ job_name: name }));
+			setJobName(name);
+			if (result) {
+				setJob((prev) => ({ ...(prev?.name === name ? prev : {}), ...result }));
+			}
+			await fetchJobStatus();
+			await refreshRecent();
+			await refreshCredit();
+		} catch (err) {
+			setError(parseFrappeError(err) || err.message || "Failed to retry job");
+		} finally {
+			setRetrying(false);
+		}
+	};
+
+	const handleZip = async (name) => {
+		if (zipping) return;
+		setZipping(true);
+		setError(null);
+		try {
+			const result = unwrapFrappeMessage(await createJobZip({ job_name: name }));
+			if (result?.zip_file) {
+				window.open(result.zip_file, "_blank", "noopener,noreferrer");
+			}
+			if (jobName === name) {
+				await fetchJobStatus();
+			}
+		} catch (err) {
+			setError(parseFrappeError(err) || err.message || "Failed to create ZIP file");
+		} finally {
+			setZipping(false);
 		}
 	};
 
@@ -194,7 +257,7 @@ function AuthenticatedApp({ currentUser }) {
 	return (
 		<div className="min-h-screen bg-gray-100">
 			<header className="border-b border-gray-200 bg-white">
-				<div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-4">
+				<div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
 					<div>
 						<h1 className="text-lg font-bold text-gray-900">Audio Vocal Remover</h1>
 						<p className="text-sm text-gray-500">Separate vocals and instrumentals with WaveSpeed</p>
@@ -208,7 +271,7 @@ function AuthenticatedApp({ currentUser }) {
 				</div>
 			</header>
 
-			<main className="mx-auto max-w-4xl space-y-4 p-4">
+			<main className="mx-auto max-w-5xl space-y-4 p-4">
 				{error && (
 					<div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
 						{error}
@@ -252,7 +315,9 @@ function AuthenticatedApp({ currentUser }) {
 							<strong>{formatCost(estimatedCost, displayCurrency)}</strong>
 						</p>
 					) : (
-						<p className="text-sm text-gray-500">Cost will be calculated after upload.</p>
+						<p className="text-sm text-amber-700">
+							Audio duration is unknown. Separation cannot be started until duration is available.
+						</p>
 					)}
 				</Section>
 
@@ -260,7 +325,9 @@ function AuthenticatedApp({ currentUser }) {
 					{!settings?.credit_management_enabled ? (
 						<p className="text-sm text-gray-500">Credit management is not enabled.</p>
 					) : credit.error ? (
-						<p className="text-sm text-red-600">{credit.error}</p>
+						<p className="text-sm text-red-600">
+							Credit integration is unavailable: {credit.error}
+						</p>
 					) : (
 						<div className="space-y-1 text-sm text-gray-700">
 							<p>
@@ -295,7 +362,7 @@ function AuthenticatedApp({ currentUser }) {
 				<Section title="Start Separation">
 					<button
 						type="button"
-						disabled={startDisabled}
+						disabled={startDisabled || job?.is_active}
 						onClick={handleStart}
 						className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
 					>
@@ -307,26 +374,44 @@ function AuthenticatedApp({ currentUser }) {
 				</Section>
 
 				<Section title="Job Status">
-					<p className="font-medium text-gray-900">
-						{job ? (
-							<>
-								Job <strong>{job.name}</strong> — Status: {job.status}
-							</>
-						) : (
-							"No active job"
-						)}
-					</p>
-					{job?.error_message &&
-						(job.status === "Failed" || job.status === "Completed") && (
-							<p className="mt-2 text-sm text-red-600">{job.error_message}</p>
-						)}
-					{settings?.credit_management_enabled && job?.credit_status && (
-						<p className="mt-2 text-sm text-gray-600">
-							Credit status: <strong>{job.credit_status}</strong>
-						</p>
-					)}
-					{settings?.credit_management_enabled && job?.credit_error && (
-						<p className="mt-2 text-sm text-red-600">{job.credit_error}</p>
+					{job ? (
+						<div className="space-y-2">
+							<p className="font-medium text-gray-900">
+								Job <strong>{job.name}</strong>{" "}
+								<StatusBadge status={job.status} />
+							</p>
+							<p className="text-sm text-gray-600">{statusMessage}</p>
+							{settings?.credit_management_enabled && job.credit_status && (
+								<p className="text-sm text-gray-600">
+									Credit status: <strong>{job.credit_status}</strong>
+								</p>
+							)}
+							{settings?.credit_management_enabled && job.credit_error && (
+								<p className="text-sm text-red-600">{job.credit_error}</p>
+							)}
+							{job.status === "Failed" && job.can_retry && (
+								<button
+									type="button"
+									disabled={retrying || job.is_active}
+									onClick={() => handleRetry(job.name)}
+									className="rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+								>
+									{retrying ? "Retrying..." : "Retry Job"}
+								</button>
+							)}
+							{job.can_zip && (
+								<button
+									type="button"
+									disabled={zipping}
+									onClick={() => handleZip(job.name)}
+									className="ml-2 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+								>
+									{zipping ? "Creating ZIP..." : "Download ZIP"}
+								</button>
+							)}
+						</div>
+					) : (
+						<p className="text-sm text-gray-500">No active job</p>
 					)}
 				</Section>
 
@@ -339,11 +424,16 @@ function AuthenticatedApp({ currentUser }) {
 				</Section>
 
 				<Section title="Vocal Output">
-					{job?.vocal_output_url ? (
+					{job?.vocal_output_url || job?.vocal_file ? (
 						<>
-							<audio controls preload="none" src={job.vocal_output_url} className="w-full" />
+							<audio
+								controls
+								preload="none"
+								src={job.vocal_output_url || job.vocal_file}
+								className="w-full"
+							/>
 							<a
-								href={job.vocal_output_url}
+								href={job.vocal_output_url || job.vocal_file}
 								className="mt-2 inline-block text-sm text-blue-600 hover:underline"
 								download
 							>
@@ -356,16 +446,16 @@ function AuthenticatedApp({ currentUser }) {
 				</Section>
 
 				<Section title="Instrumental Output">
-					{job?.instrumental_output_url ? (
+					{job?.instrumental_output_url || job?.instrumental_file ? (
 						<>
 							<audio
 								controls
 								preload="none"
-								src={job.instrumental_output_url}
+								src={job.instrumental_output_url || job.instrumental_file}
 								className="w-full"
 							/>
 							<a
-								href={job.instrumental_output_url}
+								href={job.instrumental_output_url || job.instrumental_file}
 								className="mt-2 inline-block text-sm text-blue-600 hover:underline"
 								download
 							>
@@ -386,20 +476,85 @@ function AuthenticatedApp({ currentUser }) {
 								<thead className="bg-gray-50">
 									<tr>
 										<th className="border-b px-3 py-2 text-left">Job</th>
+										<th className="border-b px-3 py-2 text-left">File</th>
 										<th className="border-b px-3 py-2 text-left">Status</th>
-										<th className="border-b px-3 py-2 text-left">Duration (s)</th>
+										{settings?.credit_management_enabled && (
+											<th className="border-b px-3 py-2 text-left">Credit</th>
+										)}
+										<th className="border-b px-3 py-2 text-left">Duration</th>
+										<th className="border-b px-3 py-2 text-left">Cost</th>
+										<th className="border-b px-3 py-2 text-left">Created</th>
+										<th className="border-b px-3 py-2 text-left">Completed</th>
+										<th className="border-b px-3 py-2 text-left">Outputs</th>
+										<th className="border-b px-3 py-2 text-left">Actions</th>
 									</tr>
 								</thead>
 								<tbody>
 									{recentJobs.map((row) => (
-										<tr
-											key={row.name}
-											className="cursor-pointer hover:bg-gray-50"
-											onClick={() => loadJob(row.name)}
-										>
-											<td className="border-b px-3 py-2 text-blue-600">{row.name}</td>
-											<td className="border-b px-3 py-2">{row.status}</td>
-											<td className="border-b px-3 py-2">{row.duration_seconds || ""}</td>
+										<tr key={row.name} className="hover:bg-gray-50">
+											<td className="border-b px-3 py-2 font-medium text-gray-900">{row.name}</td>
+											<td className="border-b px-3 py-2 text-gray-600">
+												{row.original_filename || "—"}
+											</td>
+											<td className="border-b px-3 py-2">
+												<StatusBadge status={row.status} />
+												{row.error_summary && (
+													<p className="mt-1 text-xs text-red-600">{row.error_summary}</p>
+												)}
+											</td>
+											{settings?.credit_management_enabled && (
+												<td className="border-b px-3 py-2">{row.credit_status || "—"}</td>
+											)}
+											<td className="border-b px-3 py-2">
+												{row.duration_seconds ? `${row.duration_seconds}s` : "—"}
+											</td>
+											<td className="border-b px-3 py-2">
+												{row.provider_cost_usd
+													? formatCost(row.provider_cost_usd, displayCurrency)
+													: "—"}
+											</td>
+											<td className="border-b px-3 py-2 text-gray-600">
+												{formatDateTime(row.creation)}
+											</td>
+											<td className="border-b px-3 py-2 text-gray-600">
+												{formatDateTime(row.completed_at)}
+											</td>
+											<td className="border-b px-3 py-2 text-xs text-gray-600">
+												{row.has_vocal ? "Vocal" : "—"}
+												{row.has_vocal && row.has_instrumental ? " / " : ""}
+												{row.has_instrumental ? "Instrumental" : ""}
+											</td>
+											<td className="border-b px-3 py-2">
+												<div className="flex flex-wrap gap-2">
+													<button
+														type="button"
+														onClick={() => loadJob(row.name)}
+														className="text-blue-600 hover:underline"
+													>
+														Open
+													</button>
+													{row.can_retry && (
+														<button
+															type="button"
+															disabled={retrying}
+															onClick={() => handleRetry(row.name)}
+															className="text-amber-700 hover:underline disabled:opacity-50"
+														>
+															Retry
+														</button>
+													)}
+													{row.can_zip && (
+														<button
+															type="button"
+															disabled={zipping}
+															onClick={() => handleZip(row.name)}
+															className="text-green-700 hover:underline disabled:opacity-50"
+														>
+															ZIP
+														</button>
+													)}
+												</div>
+											</td>
 										</tr>
 									))}
 								</tbody>

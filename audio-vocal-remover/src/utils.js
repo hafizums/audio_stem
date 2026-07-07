@@ -1,6 +1,16 @@
 const ACTIVE_STATUSES = ["Queued", "Uploading", "Processing"];
 const TERMINAL_STATUSES = ["Completed", "Failed", "Cancelled"];
 
+const STATUS_BADGE_CLASSES = {
+	Draft: "bg-gray-100 text-gray-800",
+	Queued: "bg-amber-100 text-amber-800",
+	Uploading: "bg-blue-100 text-blue-800",
+	Processing: "bg-indigo-100 text-indigo-800",
+	Completed: "bg-green-100 text-green-800",
+	Failed: "bg-red-100 text-red-800",
+	Cancelled: "bg-gray-200 text-gray-700",
+};
+
 export function formatCost(value, currency = "MYR") {
 	try {
 		return new Intl.NumberFormat(undefined, {
@@ -15,6 +25,47 @@ export function formatCost(value, currency = "MYR") {
 
 export function flt(value) {
 	return parseFloat(value) || 0;
+}
+
+export function formatDateTime(value) {
+	if (!value) return "";
+	try {
+		return new Intl.DateTimeFormat(undefined, {
+			dateStyle: "medium",
+			timeStyle: "short",
+		}).format(new Date(value));
+	} catch {
+		return String(value);
+	}
+}
+
+export function getStatusBadgeClass(status) {
+	return STATUS_BADGE_CLASSES[status] || "bg-gray-100 text-gray-800";
+}
+
+export function getJobStatusMessage(job, { starting, retrying, zipping } = {}) {
+	if (!job) return "Upload an audio file to create a job.";
+
+	if (starting) return "Starting separation and reserving credits if required...";
+	if (retrying) return "Retrying failed job. Previous outputs stay available until the new run succeeds.";
+	if (zipping) return "Creating ZIP archive with vocal and instrumental tracks...";
+
+	switch (job.status) {
+		case "Queued":
+			return "Your job is waiting in the queue.";
+		case "Uploading":
+			return "Uploading audio to the processing service.";
+		case "Processing":
+			return "Separating vocals and instrumentals. This may take a few minutes.";
+		case "Completed":
+			return "Separation completed. Preview, download, or create a ZIP below.";
+		case "Failed":
+			return job.error_message || "Separation failed. You can retry if allowed.";
+		case "Draft":
+			return "Job is ready. Review the estimate and start separation when ready.";
+		default:
+			return `Status: ${job.status}`;
+	}
 }
 
 export function parseFrappeError(data) {
@@ -91,11 +142,17 @@ export function isStartDisabled({ job, jobName, starting, enabled, credit, costP
 	return false;
 }
 
-export function getStartBlockedReason({ job, credit, costPerSecond }) {
+export function getStartBlockedReason({ job, credit, costPerSecond, settings }) {
 	if (!job) return "";
-	if (job.is_active) return "";
+	if (job.is_active) return "A separation job is already running for this job.";
 
 	const cost = getEstimatedCost(job, costPerSecond);
+	if (
+		credit?.enabled &&
+		credit.error
+	) {
+		return credit.error;
+	}
 	if (
 		credit?.enabled &&
 		!credit.error &&
@@ -107,11 +164,30 @@ export function getStartBlockedReason({ job, credit, costPerSecond }) {
 		return "Insufficient available credits for this separation job.";
 	}
 
+	if (!job.duration_seconds && job.status === "Draft") {
+		return "Audio duration is unknown. Separation cannot be started until duration is available.";
+	}
+
 	if (!job.can_start) {
 		return job.start_blocked_reason || "Start is not available for this job.";
 	}
 
+	if (settings?.enabled === 0) {
+		return "Audio separation is disabled in Audio Separation Settings.";
+	}
+
 	return "";
+}
+
+export function getUploadErrorMessage(err, settings) {
+	const message = parseFrappeError(err) || err?.message || "Failed to upload audio";
+	if (/exceeds the maximum allowed size/i.test(message)) {
+		return `File is too large. Maximum allowed size is ${settings?.max_file_size_mb || "?"} MB.`;
+	}
+	if (/exceeds the maximum allowed duration/i.test(message)) {
+		return `Audio is too long. Maximum allowed duration is ${settings?.max_audio_duration_seconds || "?"} seconds.`;
+	}
+	return message;
 }
 
 export { ACTIVE_STATUSES, TERMINAL_STATUSES };

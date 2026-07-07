@@ -30,8 +30,10 @@
   "instrumental_file",
   "section_break_meta",
   "error_message",
+  "cleanup_notes",
   "started_at",
-  "completed_at"
+  "completed_at",
+  "zip_file"
  ],
  "fields": [
   {
@@ -185,6 +187,12 @@
    "read_only": 1
   },
   {
+   "fieldname": "cleanup_notes",
+   "fieldtype": "Small Text",
+   "label": "Cleanup Notes",
+   "read_only": 1
+  },
+  {
    "fieldname": "started_at",
    "fieldtype": "Datetime",
    "label": "Started At",
@@ -194,6 +202,12 @@
    "fieldname": "completed_at",
    "fieldtype": "Datetime",
    "label": "Completed At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "zip_file",
+   "fieldtype": "Attach",
+   "label": "ZIP File",
    "read_only": 1
   }
  ],

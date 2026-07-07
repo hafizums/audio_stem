@@ -13,6 +13,11 @@
   "cost_per_second_usd",
   "display_currency",
   "store_outputs_locally",
+  "section_break_retention",
+  "cleanup_enabled",
+  "retention_days",
+  "delete_original_after_completion",
+  "delete_outputs_after_retention",
   "section_break_credits",
   "credit_management_enabled",
   "credit_type",
@@ -72,6 +77,36 @@
    "fieldname": "store_outputs_locally",
    "fieldtype": "Check",
    "label": "Store Outputs Locally"
+  },
+  {
+   "fieldname": "section_break_retention",
+   "fieldtype": "Section Break",
+   "label": "Retention and Cleanup"
+  },
+  {
+   "default": "0",
+   "fieldname": "cleanup_enabled",
+   "fieldtype": "Check",
+   "label": "Cleanup Enabled"
+  },
+  {
+   "default": "7",
+   "fieldname": "retention_days",
+   "fieldtype": "Int",
+   "label": "Retention Days",
+   "non_negative": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "delete_original_after_completion",
+   "fieldtype": "Check",
+   "label": "Delete Original After Completion"
+  },
+  {
+   "default": "0",
+   "fieldname": "delete_outputs_after_retention",
+   "fieldtype": "Check",
+   "label": "Delete Outputs After Retention"
   },
   {
    "fieldname": "section_break_credits",
