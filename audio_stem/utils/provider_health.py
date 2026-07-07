@@ -16,6 +16,39 @@ def _status_counts(jobs, field: str) -> dict:
 	return counts
 
 
+def _karaoke_ass_video_counts(jobs) -> dict:
+	ass_completed = 0
+	ass_failed = 0
+	video_completed = 0
+	video_failed = 0
+
+	for row in jobs:
+		status = row.get("karaoke_status") or "Not Started"
+		has_ass = bool(row.get("karaoke_ass_file"))
+		has_video = bool(row.get("karaoke_video_file"))
+		error = (row.get("karaoke_error") or "").strip()
+
+		if status == "Completed":
+			if has_ass:
+				ass_completed += 1
+			if has_video:
+				video_completed += 1
+			elif error and "Video render" in error:
+				video_failed += 1
+		elif status == "Failed":
+			if has_ass:
+				video_failed += 1
+			else:
+				ass_failed += 1
+
+	return {
+		"ass_completed": ass_completed,
+		"ass_failed": ass_failed,
+		"video_completed": video_completed,
+		"video_failed": video_failed,
+	}
+
+
 def get_provider_health_summary() -> dict:
 	since = add_to_date(now_datetime(), hours=-24)
 	jobs = frappe.get_all(
@@ -29,6 +62,9 @@ def get_provider_health_summary() -> dict:
 			"duration_seconds",
 			"transcription_status",
 			"karaoke_status",
+			"karaoke_ass_file",
+			"karaoke_video_file",
+			"karaoke_error",
 		],
 		ignore_permissions=True,
 	)
@@ -39,6 +75,16 @@ def get_provider_health_summary() -> dict:
 
 	transcription = _status_counts(jobs, "transcription_status")
 	karaoke = _status_counts(jobs, "karaoke_status")
+	karaoke_detail = _karaoke_ass_video_counts(jobs)
+
+	base_karaoke_fields = {
+		"karaoke_completed_count": karaoke["completed"],
+		"karaoke_failed_count": karaoke["failed"],
+		"karaoke_ass_completed_count": karaoke_detail["ass_completed"],
+		"karaoke_ass_failed_count": karaoke_detail["ass_failed"],
+		"karaoke_video_completed_count": karaoke_detail["video_completed"],
+		"karaoke_video_failed_count": karaoke_detail["video_failed"],
+	}
 
 	if not terminal:
 		return {
@@ -52,8 +98,7 @@ def get_provider_health_summary() -> dict:
 			"message": "No completed or failed separation jobs in the last 24 hours.",
 			"transcription_completed_count": transcription["completed"],
 			"transcription_failed_count": transcription["failed"],
-			"karaoke_completed_count": karaoke["completed"],
-			"karaoke_failed_count": karaoke["failed"],
+			**base_karaoke_fields,
 		}
 
 	success_rate = flt(len(completed)) / flt(len(terminal))
@@ -78,9 +123,12 @@ def get_provider_health_summary() -> dict:
 	if transcription["failed"] >= 3:
 		status = "warning" if status == "ok" else status
 		message = f"{message} Transcription failures: {transcription['failed']}."
-	if karaoke["failed"] >= 3:
+	if karaoke_detail["ass_failed"] >= 3:
 		status = "warning" if status == "ok" else status
-		message = f"{message} Karaoke render failures: {karaoke['failed']}."
+		message = f"{message} Karaoke ASS failures: {karaoke_detail['ass_failed']}."
+	if karaoke_detail["video_failed"] >= 3:
+		status = "warning" if status == "ok" else status
+		message = f"{message} Karaoke video render failures: {karaoke_detail['video_failed']}."
 
 	return {
 		"status": status,
@@ -93,6 +141,5 @@ def get_provider_health_summary() -> dict:
 		"message": message,
 		"transcription_completed_count": transcription["completed"],
 		"transcription_failed_count": transcription["failed"],
-		"karaoke_completed_count": karaoke["completed"],
-		"karaoke_failed_count": karaoke["failed"],
+		**base_karaoke_fields,
 	}

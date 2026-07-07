@@ -45,11 +45,16 @@
   "charge_credits_for_transcription",
   "section_break_karaoke",
   "karaoke_enabled",
-  "karaoke_default_template",
-  "karaoke_output_width",
-  "karaoke_output_height",
+  "karaoke_ass_enabled",
+  "karaoke_video_render_enabled",
+  "karaoke_style_preset",
+  "karaoke_max_words_per_line",
+  "karaoke_video_width",
+  "karaoke_video_height",
   "karaoke_background_color",
   "karaoke_include_instrumental_audio",
+  "karaoke_ffmpeg_preset",
+  "karaoke_ffmpeg_crf",
   "charge_credits_for_karaoke",
   "section_break_credits",
   "credit_management_enabled",
@@ -301,23 +306,42 @@
    "label": "Karaoke Enabled"
   },
   {
-   "default": "hype",
-   "fieldname": "karaoke_default_template",
+   "default": "1",
+   "fieldname": "karaoke_ass_enabled",
+   "fieldtype": "Check",
+   "label": "Karaoke ASS Enabled"
+  },
+  {
+   "default": "0",
+   "fieldname": "karaoke_video_render_enabled",
+   "fieldtype": "Check",
+   "label": "Karaoke Video Render Enabled"
+  },
+  {
+   "default": "default_1080p",
+   "fieldname": "karaoke_style_preset",
    "fieldtype": "Data",
-   "label": "Karaoke Default Template"
+   "label": "Karaoke Style Preset"
+  },
+  {
+   "default": "5",
+   "fieldname": "karaoke_max_words_per_line",
+   "fieldtype": "Int",
+   "label": "Karaoke Max Words Per Line",
+   "non_negative": 1
   },
   {
    "default": "1080",
-   "fieldname": "karaoke_output_width",
+   "fieldname": "karaoke_video_width",
    "fieldtype": "Int",
-   "label": "Karaoke Output Width",
+   "label": "Karaoke Video Width",
    "non_negative": 1
   },
   {
    "default": "1920",
-   "fieldname": "karaoke_output_height",
+   "fieldname": "karaoke_video_height",
    "fieldtype": "Int",
-   "label": "Karaoke Output Height",
+   "label": "Karaoke Video Height",
    "non_negative": 1
   },
   {
@@ -331,6 +355,19 @@
    "fieldname": "karaoke_include_instrumental_audio",
    "fieldtype": "Check",
    "label": "Karaoke Include Instrumental Audio"
+  },
+  {
+   "default": "veryfast",
+   "fieldname": "karaoke_ffmpeg_preset",
+   "fieldtype": "Data",
+   "label": "Karaoke FFmpeg Preset"
+  },
+  {
+   "default": "18",
+   "fieldname": "karaoke_ffmpeg_crf",
+   "fieldtype": "Int",
+   "label": "Karaoke FFmpeg CRF",
+   "non_negative": 1
   },
   {
    "default": "0",

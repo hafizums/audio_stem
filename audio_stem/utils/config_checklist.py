@@ -258,38 +258,68 @@ def get_configuration_checklist_data() -> list[dict]:
 		)
 
 	if cint(settings.karaoke_enabled):
-		from audio_stem.utils.ffmpeg_media import is_ffmpeg_available
+		from audio_stem.utils.ffmpeg_media import is_ffmpeg_available, is_ffprobe_available
+		from audio_stem.utils.karaoke_subtitles import is_karaoke_engine_available
 
 		items.append(
 			_item(
 				"karaoke_enabled",
-				_("Karaoke Rendering"),
+				_("Karaoke Subtitles"),
 				"ok",
-				_("Karaoke is enabled (template: {0}).").format(settings.karaoke_default_template or "hype"),
+				_("Karaoke subtitle generation is enabled."),
 			)
 		)
 		items.append(
 			_item(
-				"ffmpeg_available",
-				_("ffmpeg"),
-				"ok" if is_ffmpeg_available() else "error",
-				_("ffmpeg is available.") if is_ffmpeg_available() else _("ffmpeg is required for karaoke video generation."),
+				"karaoke_ass_enabled",
+				_("ASS Generation"),
+				"ok" if cint(settings.karaoke_ass_enabled) else "warning",
+				_("ASS subtitle generation is enabled.")
+				if cint(settings.karaoke_ass_enabled)
+				else _("ASS subtitle generation is disabled."),
 			)
 		)
-		from audio_stem.utils.karaoke_subtitles import is_pycaps_available
-
 		items.append(
 			_item(
-				"pycaps_available",
-				_("PyCaps (pycaps-ai)"),
-				"ok" if is_pycaps_available() else "error",
-				_("PyCaps subtitle renderer is available.")
-				if is_pycaps_available()
-				else _("Install pycaps-ai (not the unrelated PyPI package pycaps) and run playwright install chromium."),
+				"karaoke_video_render_enabled",
+				_("Video Render"),
+				"ok" if cint(settings.karaoke_video_render_enabled) else "warning",
+				_("Karaoke MP4 rendering is enabled.")
+				if cint(settings.karaoke_video_render_enabled)
+				else _("Karaoke MP4 rendering is disabled (ASS only)."),
 			)
 		)
+		items.append(
+			_item(
+				"karaoke_engine_available",
+				_("karaoke_engine"),
+				"ok" if is_karaoke_engine_available() else "error",
+				_("karaoke_engine import is available.")
+				if is_karaoke_engine_available()
+				else _("Install karaoke_engine (editable: apps/karaoke_engine)."),
+			)
+		)
+		if cint(settings.karaoke_video_render_enabled):
+			items.append(
+				_item(
+					"ffmpeg_available",
+					_("ffmpeg"),
+					"ok" if is_ffmpeg_available() else "error",
+					_("ffmpeg is available.") if is_ffmpeg_available() else _("ffmpeg is required for karaoke video rendering."),
+				)
+			)
+			items.append(
+				_item(
+					"ffprobe_available",
+					_("ffprobe"),
+					"ok" if is_ffprobe_available() else "error",
+					_("ffprobe is available.")
+					if is_ffprobe_available()
+					else _("ffprobe is required for karaoke video rendering."),
+				)
+			)
 	else:
-		items.append(_item("karaoke_enabled", _("Karaoke Rendering"), "warning", _("Karaoke rendering is disabled.")))
+		items.append(_item("karaoke_enabled", _("Karaoke Subtitles"), "warning", _("Karaoke subtitle generation is disabled.")))
 
 	return items
 

@@ -65,7 +65,9 @@ class TestAudioSeparationMilestone8(AudioStemTestCase):
 	def _enable_karaoke(self):
 		settings = frappe.get_single("Audio Separation Settings")
 		settings.karaoke_enabled = 1
-		settings.karaoke_default_template = "hype"
+		settings.karaoke_ass_enabled = 1
+		settings.karaoke_video_render_enabled = 0
+		settings.karaoke_style_preset = "default_1080p"
 		settings.save(ignore_permissions=True)
 
 	def _create_file(self):
@@ -184,7 +186,7 @@ class TestAudioSeparationMilestone8(AudioStemTestCase):
 	def test_duplicate_transcription_start_does_not_enqueue_twice(self):
 		self._enable_openai()
 		job = self._create_completed_job()
-		job.transcription_status = "Queued"
+		job.transcription_status = "Processing"
 		job.save(ignore_permissions=True)
 		with patch("audio_stem.api.separation.frappe.enqueue") as enqueue_mock:
 			result = start_transcription(job.name)
@@ -303,75 +305,81 @@ class TestAudioSeparationMilestone8(AudioStemTestCase):
 		self._enable_karaoke()
 		job = self._create_completed_job()
 		job.transcription_status = "Completed"
-		job.karaoke_status = "Queued"
+		job.karaoke_status = "Rendering"
 		job.save(ignore_permissions=True)
 		with patch("audio_stem.api.separation.frappe.enqueue") as enqueue_mock:
 			result = start_karaoke_render(job.name)
 		self.assertTrue(result.get("already_active"))
 		enqueue_mock.assert_not_called()
 
-	@patch("audio_stem.workers.karaoke_worker.render_karaoke_video_with_pycaps")
-	@patch("audio_stem.workers.karaoke_worker.create_plain_lyrics_video")
-	def test_pycaps_failure_stores_safe_karaoke_error(self, create_video_mock, render_mock):
+	@patch("audio_stem.workers.karaoke_worker.render_karaoke_video_with_engine")
+	@patch("audio_stem.workers.karaoke_worker.build_karaoke_ass_with_engine")
+	def test_karaoke_engine_failure_stores_safe_karaoke_error(self, ass_mock, render_mock):
 		self._enable_karaoke()
 		job = self._create_completed_job()
 		job.transcription_status = "Completed"
 		job.transcript_text = "hello"
 		write_transcript_json(job, SAMPLE_TRANSCRIPT)
 		job.save(ignore_permissions=True)
-		create_video_mock.return_value = "/tmp/fake-input.mp4"
-		render_mock.side_effect = Exception("openai api_key leaked traceback")
+		ass_mock.side_effect = Exception("openai api_key leaked traceback")
 		with self.assertRaises(Exception):
 			process_karaoke_render(job.name)
 		job.reload()
 		self.assertEqual(job.karaoke_status, "Failed")
 		self.assertNotIn("api_key", job.karaoke_error or "")
 
-	@patch("audio_stem.workers.karaoke_worker.render_karaoke_video_with_pycaps")
-	@patch("audio_stem.workers.karaoke_worker.create_plain_lyrics_video")
-	def test_completed_karaoke_video_attached_privately(self, create_video_mock, render_mock):
+	@patch("audio_stem.workers.karaoke_worker.render_karaoke_video_with_engine")
+	@patch("audio_stem.workers.karaoke_worker.build_karaoke_ass_with_engine")
+	def test_completed_karaoke_ass_attached_privately(self, ass_mock, render_mock):
 		self._enable_karaoke()
 		job = self._create_completed_job()
 		job.transcription_status = "Completed"
 		write_transcript_json(job, SAMPLE_TRANSCRIPT)
 		job.save(ignore_permissions=True)
-		create_video_mock.return_value = "/tmp/fake-input.mp4"
 
-		def _attach(job, **kwargs):
+		def _attach_ass(job, **kwargs):
 			file_doc = frappe.get_doc(
 				{
 					"doctype": "File",
-					"file_name": f"{job.name}-karaoke.mp4",
+					"file_name": f"{job.name}-karaoke.ass",
 					"is_private": 1,
-					"content": b"video",
+					"content": b"[Script Info]",
 				}
 			)
 			file_doc.save(ignore_permissions=True)
+			job.karaoke_ass_file = file_doc.file_url
+			job.save(ignore_permissions=True)
 			return file_doc.file_url
 
-		render_mock.side_effect = _attach
+		ass_mock.side_effect = _attach_ass
 		process_karaoke_render(job.name)
 		job.reload()
 		self.assertEqual(job.karaoke_status, "Completed")
-		file_name = frappe.db.get_value("File", {"file_url": job.karaoke_video_file}, "name")
+		self.assertTrue(job.karaoke_ass_file)
+		file_name = frappe.db.get_value("File", {"file_url": job.karaoke_ass_file}, "name")
 		self.assertEqual(frappe.db.get_value("File", file_name, "is_private"), 1)
+		render_mock.assert_not_called()
 
-	@patch("audio_stem.workers.karaoke_worker.render_karaoke_video_with_pycaps")
-	@patch("audio_stem.workers.karaoke_worker.create_plain_lyrics_video")
-	def test_old_karaoke_file_not_overwritten_until_success(self, create_video_mock, render_mock):
+	@patch("audio_stem.workers.karaoke_worker.render_karaoke_video_with_engine")
+	@patch("audio_stem.workers.karaoke_worker.build_karaoke_ass_with_engine")
+	def test_old_karaoke_file_not_overwritten_until_success(self, ass_mock, render_mock):
 		self._enable_karaoke()
+		settings = frappe.get_single("Audio Separation Settings")
+		settings.karaoke_video_render_enabled = 1
+		settings.save(ignore_permissions=True)
 		job = self._create_completed_job()
 		job.transcription_status = "Completed"
 		old_file = self._create_file().file_url
 		job.karaoke_video_file = old_file
 		write_transcript_json(job, SAMPLE_TRANSCRIPT)
 		job.save(ignore_permissions=True)
-		create_video_mock.return_value = "/tmp/fake-input.mp4"
+		ass_mock.return_value = self._create_file().file_url
 		render_mock.side_effect = Exception("render failed")
-		with self.assertRaises(Exception):
-			process_karaoke_render(job.name)
+		process_karaoke_render(job.name)
 		job.reload()
 		self.assertEqual(job.karaoke_video_file, old_file)
+		self.assertEqual(job.karaoke_status, "Completed")
+		self.assertIn("Video render failed", job.karaoke_error or "")
 
 	def test_job_detail_includes_transcription_and_karaoke_fields(self):
 		self._enable_openai()
@@ -380,7 +388,10 @@ class TestAudioSeparationMilestone8(AudioStemTestCase):
 		detail = get_job_detail(job.name)
 		self.assertIn("transcription_status", detail)
 		self.assertIn("karaoke_status", detail)
+		self.assertIn("karaoke_ass_file", detail)
 		self.assertNotIn("openai_api_key", detail)
+		self.assertNotIn("PyCaps", str(detail))
+		self.assertNotIn("pycaps", str(detail).lower())
 
 	def test_download_transcript_asset_returns_private_file(self):
 		job = self._create_completed_job()
@@ -404,6 +415,8 @@ class TestAudioSeparationMilestone8(AudioStemTestCase):
 		summary = get_provider_health_summary()
 		self.assertIn("transcription_completed_count", summary)
 		self.assertIn("karaoke_failed_count", summary)
+		self.assertIn("karaoke_ass_completed_count", summary)
+		self.assertIn("karaoke_video_completed_count", summary)
 
 	@patch("audio_stem.workers.transcription_worker.transcribe_with_whisper")
 	@patch("audio_stem.workers.transcription_worker.resolve_transcription_source_path")

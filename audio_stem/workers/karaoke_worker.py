@@ -6,19 +6,22 @@ import os
 import traceback
 
 import frappe
-from frappe.utils import now_datetime
+from frappe import _
+from frappe.utils import cint, now_datetime
 
 from audio_stem.utils.audit_log import log_audit
 from audio_stem.utils.cancellation import should_stop_for_cancellation
 from audio_stem.utils.errors import safe_error_message
 from audio_stem.utils.files import resolve_frappe_file_path
 from audio_stem.utils.karaoke_subtitles import (
+	build_karaoke_ass_with_engine,
 	build_karaoke_words_json,
-	create_plain_lyrics_video,
-	render_karaoke_video_with_pycaps,
+	get_karaoke_engine_version,
+	render_karaoke_video_with_engine,
+	resolve_karaoke_style_preset,
 	write_karaoke_json,
 )
-from audio_stem.utils.transcription_assets import write_transcript_json
+from audio_stem.utils.limits import get_settings
 
 
 def _load_transcript_data(job) -> dict:
@@ -38,7 +41,10 @@ def _load_transcript_data(job) -> dict:
 
 def process_karaoke_render(name: str, template: str | None = None):
 	job = frappe.get_doc("Audio Separation Job", name)
+	settings = get_settings()
 	previous_video = job.karaoke_video_file
+	previous_ass = job.karaoke_ass_file
+	style_preset = resolve_karaoke_style_preset(template)
 
 	if should_stop_for_cancellation(job):
 		job.karaoke_status = "Cancelled"
@@ -49,28 +55,33 @@ def process_karaoke_render(name: str, template: str | None = None):
 
 	job.reload()
 	job.karaoke_status = "Rendering"
-	job.karaoke_template = template or job.karaoke_template
+	job.karaoke_template = style_preset
 	job.karaoke_started_at = now_datetime()
 	job.karaoke_error = None
 	job.save(ignore_permissions=True)
 
-	input_video_path = None
-	karaoke_json_path = None
+	video_render_enabled = bool(cint(settings.karaoke_video_render_enabled))
+	ass_generated = False
+	video_generated = False
 
 	try:
 		transcript_data = _load_transcript_data(job)
 		karaoke_data = build_karaoke_words_json(job, transcript_data)
 		write_karaoke_json(job, karaoke_data)
-		karaoke_json_path = resolve_frappe_file_path(job.karaoke_subtitle_json_file)
+		job.save(ignore_permissions=True)
 
-		input_video_path = create_plain_lyrics_video(job)
-		new_video_url = render_karaoke_video_with_pycaps(
-			job,
-			input_video_path=input_video_path,
-			karaoke_json_path=karaoke_json_path,
-			template=template,
-		)
-		job.karaoke_video_file = new_video_url
+		build_karaoke_ass_with_engine(job, style_preset=style_preset)
+		ass_generated = True
+		job.karaoke_engine_version = get_karaoke_engine_version()
+		job.save(ignore_permissions=True)
+
+		if video_render_enabled:
+			render_karaoke_video_with_engine(job, style_preset=style_preset)
+			video_generated = True
+			job.karaoke_error = None
+		else:
+			job.karaoke_error = _("ASS subtitle generated. Video render is disabled.")
+
 		job.karaoke_status = "Completed"
 		job.karaoke_completed_at = now_datetime()
 		job.save(ignore_permissions=True)
@@ -78,14 +89,24 @@ def process_karaoke_render(name: str, template: str | None = None):
 			"Complete Karaoke",
 			reference_doctype=job.doctype,
 			reference_name=job.name,
-			message="Karaoke render completed.",
+			message="Karaoke ASS generated."
+			if not video_render_enabled
+			else "Karaoke ASS and video generated.",
 		)
 	except Exception as exc:
 		job.reload()
 		if previous_video:
 			job.karaoke_video_file = previous_video
-		job.karaoke_status = "Failed"
-		job.karaoke_error = safe_error_message(exc)
+		if previous_ass and not ass_generated:
+			job.karaoke_ass_file = previous_ass
+
+		if ass_generated and video_render_enabled and not video_generated:
+			job.karaoke_status = "Completed"
+			job.karaoke_error = _("ASS subtitle generated. Video render failed.")
+		else:
+			job.karaoke_status = "Failed"
+			job.karaoke_error = safe_error_message(exc)
+
 		job.karaoke_completed_at = now_datetime()
 		job.save(ignore_permissions=True)
 		frappe.log_error(title=f"Karaoke render failed for {job.name}", message=traceback.format_exc())
@@ -95,10 +116,5 @@ def process_karaoke_render(name: str, template: str | None = None):
 			reference_name=job.name,
 			message=job.karaoke_error,
 		)
-		raise
-	finally:
-		if input_video_path and os.path.exists(input_video_path):
-			try:
-				os.unlink(input_video_path)
-			except OSError:
-				pass
+		if job.karaoke_status == "Failed":
+			raise

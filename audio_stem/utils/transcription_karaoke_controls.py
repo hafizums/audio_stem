@@ -83,6 +83,10 @@ def can_start_karaoke(job) -> tuple[bool, str | None]:
 	if not is_karaoke_enabled():
 		return False, _("Karaoke rendering is disabled.")
 
+	settings = get_settings()
+	if not cint(settings.karaoke_ass_enabled):
+		return False, _("Karaoke ASS subtitle generation is disabled.")
+
 	status = _default_karaoke_status(job)
 	if karaoke_queue_is_stale(job):
 		return True, None
@@ -114,8 +118,11 @@ def enqueue_transcription(job, *, source: str, language: str | None = None):
 
 def enqueue_karaoke(job, *, template: str | None = None):
 	settings = get_settings()
+	from audio_stem.utils.karaoke_subtitles import resolve_karaoke_style_preset
+
+	style_preset = resolve_karaoke_style_preset(template)
 	job.karaoke_status = "Queued"
-	job.karaoke_template = template or settings.karaoke_default_template or "hype"
+	job.karaoke_template = style_preset
 	job.karaoke_error = None
 	job.save(ignore_permissions=True)
 	frappe.enqueue(
@@ -123,5 +130,5 @@ def enqueue_karaoke(job, *, template: str | None = None):
 		queue="long",
 		job_id=f"audio_karaoke:{job.name}",
 		name=job.name,
-		template=job.karaoke_template,
+		template=style_preset,
 	)

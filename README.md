@@ -458,7 +458,7 @@ bench --site <your-site> run-tests --app audio_stem
 
 ## Milestone 8
 
-OpenAI Whisper transcription and karaoke subtitle video generation (PyCaps + ffmpeg).
+OpenAI Whisper transcription and karaoke subtitle generation (`karaoke_engine` + optional ffmpeg).
 
 ### OpenAI Whisper setup
 
@@ -473,18 +473,44 @@ OpenAI Whisper transcription and karaoke subtitle video generation (PyCaps + ffm
 | `enable_word_timestamps` | 1 | Request word + segment timestamps |
 | `charge_credits_for_transcription` | 0 | Optional credit charge (uses credit client only) |
 
-### Karaoke / PyCaps
+### Karaoke / karaoke_engine (Milestone 8.1)
 
 | Field | Default | Purpose |
 | --- | --- | --- |
-| `karaoke_enabled` | 0 | Enable karaoke render pipeline |
-| `karaoke_default_template` | `hype` | PyCaps template name |
-| `karaoke_output_width` / `karaoke_output_height` | 1080 / 1920 | 9:16 background video |
+| `karaoke_enabled` | 0 | Enable karaoke subtitle pipeline |
+| `karaoke_ass_enabled` | 1 | Generate ASS karaoke subtitles |
+| `karaoke_video_render_enabled` | 0 | Burn ASS into MP4 with ffmpeg |
+| `karaoke_style_preset` | `default_1080p` | `default_1080p`, `default_720p`, `mobile_1080x1920` |
+| `karaoke_max_words_per_line` | 5 | Line breaking for ASS |
+| `karaoke_video_width` / `karaoke_video_height` | 1080 / 1920 | Background video dimensions |
 | `karaoke_background_color` | `#111111` | ffmpeg background color |
 | `karaoke_include_instrumental_audio` | 1 | Prefer instrumental audio in karaoke video |
+| `karaoke_ffmpeg_preset` | `veryfast` | ffmpeg preset when rendering MP4 |
+| `karaoke_ffmpeg_crf` | 18 | ffmpeg CRF when rendering MP4 |
 | `charge_credits_for_karaoke` | 0 | Optional credit charge (uses credit client only) |
 
-**System requirements:** `ffmpeg` for background video generation; `pycaps-ai` + Playwright Chromium for karaoke rendering (`pip install "pycaps-ai[base]"` then `playwright install chromium`). Do **not** install the unrelated PyPI package `pycaps` (Linux capabilities).
+**Pipelines**
+
+- Transcription: `OpenAI whisper-1 → transcript JSON/SRT/VTT`
+- Karaoke subtitles: `transcript JSON → karaoke_engine → ASS`
+- Optional video: `ASS + audio/background video → FFmpeg burn-in → MP4`
+
+**System requirements**
+
+- `karaoke_engine` — required for ASS generation (no ffmpeg, PyTorch, CUDA, Playwright, or Chromium)
+- `ffmpeg` + `ffprobe` — only required when `karaoke_video_render_enabled` is on
+
+**Install karaoke_engine (bench)**
+
+```bash
+cd /path/to/frappe-bench
+git clone https://github.com/hafizums/karaoke_engine.git apps/karaoke_engine
+./env/bin/pip uninstall -y pycaps pycaps-ai pycaps_ai playwright 2>/dev/null || true
+./env/bin/pip install -e apps/karaoke_engine
+./env/bin/pip install -e apps/audio_stem
+```
+
+`pyproject.toml` references `karaoke_engine @ file:../karaoke_engine` for editable local installs.
 
 ### Transcription flow
 
@@ -496,20 +522,21 @@ OpenAI Whisper transcription and karaoke subtitle video generation (PyCaps + ffm
 
 ### Karaoke flow
 
-1. Requires completed transcription.
+1. Requires completed transcription with `transcript_json_file` (Whisper verbose JSON).
 2. `start_karaoke_render` queues `process_karaoke_render`.
-3. Worker builds karaoke word JSON, creates a simple ffmpeg background video (if needed), renders with PyCaps.
-4. Attaches private karaoke MP4 to the job. Failed renders do not overwrite an existing karaoke video.
+3. Worker builds normalized karaoke word JSON, generates ASS via `karaoke_engine`.
+4. If `karaoke_video_render_enabled` is on, creates a background video (when needed) and burns ASS into MP4 with ffmpeg.
+5. Attaches private ASS (and optional MP4) to the job. Failed video render keeps the ASS file.
 
 ### APIs
 
 - `audio_stem.api.separation.start_transcription(job_name, source="Vocal", language=None)`
 - `audio_stem.api.separation.get_transcription_status(job_name)`
 - `audio_stem.api.separation.download_transcript_asset(job_name, asset_type)` — `json`, `srt`, `vtt`
-- `audio_stem.api.separation.start_karaoke_render(job_name, template=None)`
+- `audio_stem.api.separation.start_karaoke_render(job_name, template=None)` — `template` is deprecated; mapped to `karaoke_style_preset`
 - `audio_stem.api.separation.get_karaoke_status(job_name)`
 
-### Manual test (Milestone 8)
+### Manual test (Milestone 8 / 8.1)
 
 ```bash
 cd /path/to/frappe-bench
@@ -521,17 +548,20 @@ bench restart
 bench --site <your-site> run-tests --app audio_stem
 ```
 
-1. Configure OpenAI API key and enable OpenAI transcription.
-2. Complete one vocal separation job.
-3. Start transcription from **Vocal** source.
-4. Confirm transcript preview and download JSON/SRT/VTT.
-5. Enable karaoke and start render.
-6. Confirm karaoke video preview/download.
-7. Test invalid OpenAI key shows a safe error.
-8. Test mobile layout.
-9. Run the full test suite.
+1. Deploy and migrate.
+2. Confirm PyCaps/Playwright/Chromium are **not** in dependency files.
+3. Install `karaoke_engine` (see above).
+4. Configure OpenAI API key and enable transcription.
+5. Complete one audio separation job.
+6. Run transcription from **Vocal** source.
+7. Generate karaoke ASS subtitle.
+8. Download ASS file from job detail.
+9. Enable `karaoke_video_render_enabled` and confirm ffmpeg/ffprobe are on PATH.
+10. Render karaoke MP4 and confirm preview/download.
+11. Disable video render and confirm ASS generation still works without ffmpeg.
+12. Run the full test suite.
 
-### Troubleshooting (Milestone 8)
+### Troubleshooting (Milestone 8 / 8.1)
 
 | Symptom | Likely cause | What to check |
 | --- | --- | --- |
@@ -540,9 +570,11 @@ bench --site <your-site> run-tests --app audio_stem
 | Vocal source blocked | Separation not completed | Job status + vocal output |
 | File too large | Over 25 MB default | `transcription_max_file_size_mb`; ffmpeg compression |
 | Karaoke disabled | `karaoke_enabled` off | Settings + SPA section |
-| Karaoke needs transcription | Transcription not completed | `transcription_status` |
-| ffmpeg missing | Not on PATH | Install ffmpeg; admin checklist |
-| PyCaps render failed | Template/render error | `karaoke_error`; Error Log (server-side only) |
+| ASS disabled | `karaoke_ass_enabled` off | Settings |
+| Karaoke needs transcription | Transcription not completed | `transcription_status` + `transcript_json_file` |
+| karaoke_engine missing | Package not installed | Admin checklist; `pip install -e apps/karaoke_engine` |
+| ffmpeg missing | Not on PATH | Only needed when video render enabled |
+| Video render failed, ASS OK | ffmpeg/ffprobe error | `karaoke_error`; Error Log (server-side only) |
 
 ### Run tests
 

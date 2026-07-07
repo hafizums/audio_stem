@@ -85,9 +85,6 @@ export default function JobDetailPanel({
 	const [transcriptionLanguage, setTranscriptionLanguage] = useState(
 		job.default_transcription_language || settings?.default_transcription_language || ""
 	);
-	const [karaokeTemplate, setKaraokeTemplate] = useState(
-		job.karaoke_template || job.karaoke_default_template || settings?.karaoke_default_template || "hype"
-	);
 
 	const vocalTranscriptionBlocked =
 		job.is_active ||
@@ -104,6 +101,11 @@ export default function JobDetailPanel({
 		!job.can_start_karaoke ||
 		karaokeRendering ||
 		job.is_karaoke_active;
+	const karaokeInfoMessage =
+		job.karaoke_status === "Completed" &&
+		job.karaoke_error &&
+		(job.karaoke_error.includes("Video render is disabled") ||
+			job.karaoke_error.includes("Video render failed"));
 
 	return (
 		<div className="space-y-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
@@ -309,41 +311,51 @@ export default function JobDetailPanel({
 			</div>
 
 			<div className="space-y-3 border-t border-gray-100 pt-4">
-				<h3 className="text-sm font-semibold text-gray-900">Karaoke Video</h3>
+				<h3 className="text-sm font-semibold text-gray-900">Karaoke Subtitles</h3>
 				{!job.karaoke_enabled && !settings?.karaoke_enabled ? (
-					<p className="text-sm text-gray-500">Karaoke rendering is disabled.</p>
+					<p className="text-sm text-gray-500">Karaoke subtitle generation is disabled.</p>
 				) : (
 					<div className="space-y-3">
 						<div className="flex flex-wrap items-center gap-2">
 							<StatusBadge status={job.karaoke_status || "Not Started"} />
+							{job.karaoke_engine_version && (
+								<span className="text-xs text-gray-500">karaoke_engine {job.karaoke_engine_version}</span>
+							)}
 						</div>
-						<label className="block text-sm text-gray-700">
-							Template
-							<input
-								type="text"
-								className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm sm:max-w-xs"
-								value={karaokeTemplate}
-								onChange={(e) => setKaraokeTemplate(e.target.value)}
-								disabled={karaokeRendering || job.is_karaoke_active}
-							/>
-						</label>
+						{settings?.karaoke_video_render_enabled && (
+							<p className="text-xs text-gray-500">MP4 video rendering is enabled on this site.</p>
+						)}
 						<button
 							type="button"
 							disabled={karaokeDisabled}
-							onClick={() => onKaraoke(job.name, karaokeTemplate)}
+							onClick={() => onKaraoke(job.name)}
 							className="rounded-md bg-purple-600 px-3 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
 						>
 							{karaokeRendering || job.is_karaoke_active
-								? "Rendering..."
-								: "Start Karaoke Render"}
+								? "Generating..."
+								: "Generate Karaoke Subtitle"}
 						</button>
 						{job.karaoke_blocked_reason && karaokeDisabled && (
 							<p className="text-sm text-gray-600">{job.karaoke_blocked_reason}</p>
 						)}
-						{job.karaoke_error && <p className="text-sm text-red-600">{job.karaoke_error}</p>}
+						{karaokeInfoMessage && (
+							<p className="text-sm text-gray-600">{job.karaoke_error}</p>
+						)}
+						{job.karaoke_error && !karaokeInfoMessage && (
+							<p className="text-sm text-red-600">{job.karaoke_error}</p>
+						)}
+						{(job.has_karaoke_ass || job.karaoke_ass_file) && (
+							<a
+								href={job.karaoke_ass_file}
+								className="inline-block text-sm text-blue-600 hover:underline"
+								download
+							>
+								Download ASS
+							</a>
+						)}
 						{job.karaoke_video_file && (
 							<div>
-								<p className="mb-2 text-sm font-medium text-gray-700">Karaoke preview</p>
+								<p className="mb-2 text-sm font-medium text-gray-700">Karaoke video preview</p>
 								<video
 									controls
 									preload="none"
@@ -355,7 +367,7 @@ export default function JobDetailPanel({
 									className="mt-2 inline-block text-sm text-blue-600 hover:underline"
 									download
 								>
-									Download karaoke video
+									Download karaoke MP4
 								</a>
 							</div>
 						)}

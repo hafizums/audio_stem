@@ -52,8 +52,12 @@
   "section_break_karaoke",
   "karaoke_status",
   "karaoke_template",
+  "karaoke_ass_file",
   "karaoke_video_file",
   "karaoke_subtitle_json_file",
+  "karaoke_render_source_video_file",
+  "karaoke_source_transcript_file",
+  "karaoke_engine_version",
   "karaoke_error",
   "karaoke_started_at",
   "karaoke_completed_at",
@@ -345,7 +349,13 @@
   {
    "fieldname": "karaoke_template",
    "fieldtype": "Data",
-   "label": "Karaoke Template",
+   "label": "Karaoke Style Preset",
+   "read_only": 1
+  },
+  {
+   "fieldname": "karaoke_ass_file",
+   "fieldtype": "Attach",
+   "label": "Karaoke ASS File",
    "read_only": 1
   },
   {
@@ -358,6 +368,24 @@
    "fieldname": "karaoke_subtitle_json_file",
    "fieldtype": "Attach",
    "label": "Karaoke Subtitle JSON File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "karaoke_render_source_video_file",
+   "fieldtype": "Attach",
+   "label": "Karaoke Render Source Video File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "karaoke_source_transcript_file",
+   "fieldtype": "Attach",
+   "label": "Karaoke Source Transcript File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "karaoke_engine_version",
+   "fieldtype": "Data",
+   "label": "Karaoke Engine Version",
    "read_only": 1
   },
   {

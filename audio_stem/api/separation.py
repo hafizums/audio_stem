@@ -306,12 +306,16 @@ def _transcription_karaoke_payload(job):
 		"transcription_completed_at": job.get("transcription_completed_at"),
 		"transcription_cost_usd": flt(job.get("transcription_cost_usd")),
 		"karaoke_status": job.get("karaoke_status") or "Not Started",
-		"karaoke_template": job.get("karaoke_template") or settings.karaoke_default_template,
+		"karaoke_style_preset": job.get("karaoke_template") or settings.karaoke_style_preset or "default_1080p",
+		"karaoke_ass_file": job.get("karaoke_ass_file"),
 		"karaoke_video_file": job.get("karaoke_video_file"),
 		"karaoke_subtitle_json_file": job.get("karaoke_subtitle_json_file"),
+		"karaoke_engine_version": job.get("karaoke_engine_version"),
 		"karaoke_error": job.get("karaoke_error"),
 		"karaoke_started_at": job.get("karaoke_started_at"),
 		"karaoke_completed_at": job.get("karaoke_completed_at"),
+		"karaoke_video_render_enabled": bool(cint(settings.karaoke_video_render_enabled)),
+		"karaoke_ass_enabled": bool(cint(settings.karaoke_ass_enabled)),
 		"can_start_transcription": can_transcribe,
 		"transcription_blocked_reason": transcription_blocked_reason,
 		"can_start_karaoke": can_karaoke,
@@ -319,6 +323,7 @@ def _transcription_karaoke_payload(job):
 		"has_transcript_json": bool(job.get("transcript_json_file")),
 		"has_transcript_srt": bool(job.get("transcript_srt_file")),
 		"has_transcript_vtt": bool(job.get("transcript_vtt_file")),
+		"has_karaoke_ass": bool(job.get("karaoke_ass_file")),
 		"has_karaoke_video": bool(job.get("karaoke_video_file")),
 		"is_transcription_active": (
 			job.get("transcription_status") in ("Queued", "Processing")
@@ -327,7 +332,7 @@ def _transcription_karaoke_payload(job):
 		"is_karaoke_active": (
 			job.get("karaoke_status") in ("Queued", "Rendering") and not karaoke_queue_is_stale(job)
 		),
-		"karaoke_default_template": settings.karaoke_default_template or "hype",
+		"karaoke_style_preset_default": settings.karaoke_style_preset or "default_1080p",
 		"default_transcription_language": settings.default_transcription_language,
 	}
 
@@ -478,7 +483,9 @@ def get_page_settings():
 		"is_system_manager": _is_system_manager(),
 		"openai_enabled": bool(cint(get_settings().openai_enabled)),
 		"karaoke_enabled": bool(cint(get_settings().karaoke_enabled)),
-		"karaoke_default_template": get_settings().karaoke_default_template or "hype",
+		"karaoke_ass_enabled": bool(cint(get_settings().karaoke_ass_enabled)),
+		"karaoke_video_render_enabled": bool(cint(get_settings().karaoke_video_render_enabled)),
+		"karaoke_style_preset": get_settings().karaoke_style_preset or "default_1080p",
 		"default_transcription_language": get_settings().default_transcription_language,
 		"transcription_max_file_size_mb": cint(get_settings().transcription_max_file_size_mb) or 25,
 	}
@@ -845,7 +852,6 @@ def download_transcript_asset(job_name: str, asset_type: str):
 def start_karaoke_render(job_name: str, template: str | None = None):
 	_require_app_access()
 	job = _get_job_for_user(job_name)
-	settings = get_settings()
 
 	from audio_stem.utils.audit_log import log_audit
 	from audio_stem.utils.transcription_karaoke_controls import (
@@ -855,6 +861,8 @@ def start_karaoke_render(job_name: str, template: str | None = None):
 		is_karaoke_enabled,
 		karaoke_queue_is_stale,
 	)
+
+	from audio_stem.utils.karaoke_subtitles import resolve_karaoke_style_preset
 
 	if not is_karaoke_enabled():
 		frappe.throw(_("Karaoke rendering is disabled."), frappe.ValidationError)
@@ -867,14 +875,14 @@ def start_karaoke_render(job_name: str, template: str | None = None):
 	if not can_start:
 		frappe.throw(blocked_reason or _("Karaoke rendering cannot be started."), frappe.ValidationError)
 
-	template = template or settings.karaoke_default_template or "hype"
-	enqueue_karaoke(job, template=template)
+	style_preset = resolve_karaoke_style_preset(template)
+	enqueue_karaoke(job, template=style_preset)
 	log_audit(
 		"Start Karaoke",
 		reference_doctype=job.doctype,
 		reference_name=job.name,
-		message=f"Karaoke render queued with template {template}.",
-		metadata={"template": template},
+		message=f"Karaoke subtitle generation queued with style {style_preset}.",
+		metadata={"style_preset": style_preset},
 	)
 	job.reload()
 	return {**_job_detail_payload(job), "already_active": False}

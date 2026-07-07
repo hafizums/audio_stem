@@ -10,6 +10,18 @@ import frappe
 from frappe import _
 
 
+def is_ffprobe_available() -> bool:
+	return bool(shutil.which("ffprobe"))
+
+
+def ensure_ffprobe_available():
+	if not is_ffprobe_available():
+		frappe.throw(
+			_("ffprobe is required for karaoke video rendering but was not found on the server PATH."),
+			frappe.ValidationError,
+		)
+
+
 def is_ffmpeg_available() -> bool:
 	return bool(shutil.which("ffmpeg"))
 

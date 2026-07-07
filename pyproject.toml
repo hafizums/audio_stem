@@ -13,8 +13,7 @@ dependencies = [
     "mutagen>=1.47.0",
     "requests>=2.31.0",
     "openai>=1.0.0",
-    "pycaps-ai>=0.2.1",
-    "playwright>=1.40",
+    "karaoke_engine @ git+https://github.com/hafizums/karaoke_engine.git",
 ]
 
 [build-system]

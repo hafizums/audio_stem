@@ -356,19 +356,19 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 		}
 	};
 
-	const handleKaraoke = async (name, template) => {
+	const handleKaraoke = async (name) => {
 		if (karaokeRendering) return;
 		setKaraokeRendering(true);
 		setError(null);
 		try {
 			const result = unwrapFrappeMessage(
-				await startKaraokeRender({ job_name: name, template: template || undefined })
+				await startKaraokeRender({ job_name: name })
 			);
 			setJobName(name);
 			setJob(result);
 			await fetchJobDetail();
 		} catch (err) {
-			setError(parseFrappeError(err) || err.message || "Failed to start karaoke render");
+			setError(parseFrappeError(err) || err.message || "Failed to start karaoke subtitle generation");
 		} finally {
 			setKaraokeRendering(false);
 		}
