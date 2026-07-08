@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useFrappeGetCall } from "frappe-react-sdk";
+import { useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
 import AdminChecklist from "./AdminChecklist";
 import { formatDateTime, parseFrappeError, unwrapFrappeMessage } from "./utils";
 
@@ -8,6 +8,7 @@ const ADMIN_TABS = [
 	{ key: "queue", label: "Queue" },
 	{ key: "provider", label: "Provider" },
 	{ key: "usage", label: "Usage" },
+	{ key: "credits", label: "Credit Reconciliation" },
 ];
 
 function HealthCard({ title, children }) {
@@ -28,11 +29,19 @@ export default function AdminSection() {
 	const { data: queueResponse } = useFrappeGetCall("audio_stem.api.admin.get_queue_health");
 	const { data: providerResponse } = useFrappeGetCall("audio_stem.api.admin.get_provider_health");
 	const { data: usageResponse } = useFrappeGetCall("audio_stem.api.admin.get_audio_stem_usage_summary");
+	const {
+		data: reconciliationResponse,
+		mutate: refreshReconciliation,
+	} = useFrappeGetCall("audio_stem.api.admin.get_credit_reconciliation_issues");
+	const { call: retryReconciliation, loading: retryingReconciliation } = useFrappePostCall(
+		"audio_stem.api.admin.retry_credit_reconciliation"
+	);
 
 	const checklistItems = unwrapFrappeMessage(checklistResponse) || [];
 	const queue = unwrapFrappeMessage(queueResponse);
 	const provider = unwrapFrappeMessage(providerResponse);
 	const usage = unwrapFrappeMessage(usageResponse);
+	const reconciliationIssues = unwrapFrappeMessage(reconciliationResponse) || [];
 
 	return (
 		<div className="space-y-4">
@@ -161,6 +170,61 @@ export default function AdminSection() {
 						</div>
 					) : (
 						<p className="text-sm text-gray-500">Loading usage summary…</p>
+					)}
+				</section>
+			)}
+
+			{activeTab === "credits" && (
+				<section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+					<h3 className="mb-3 text-sm font-semibold text-gray-900">Credit reconciliation</h3>
+					<p className="mb-3 text-xs text-gray-500">
+						Jobs where separation completed but credit consumption may need admin retry.
+					</p>
+					{reconciliationIssues.length === 0 ? (
+						<p className="text-sm text-gray-600">No reconciliation issues found.</p>
+					) : (
+						<div className="overflow-x-auto">
+							<table className="min-w-full border border-gray-200 text-sm">
+								<thead className="bg-gray-50">
+									<tr>
+										<th className="border-b px-2 py-2 text-left">Job</th>
+										<th className="border-b px-2 py-2 text-left">User</th>
+										<th className="border-b px-2 py-2 text-left">Status</th>
+										<th className="border-b px-2 py-2 text-left">Credit</th>
+										<th className="border-b px-2 py-2 text-left">Error</th>
+										<th className="border-b px-2 py-2 text-left">Action</th>
+									</tr>
+								</thead>
+								<tbody>
+									{reconciliationIssues.map((row) => (
+										<tr key={row.name}>
+											<td className="border-b px-2 py-2">{row.name}</td>
+											<td className="border-b px-2 py-2">{row.user}</td>
+											<td className="border-b px-2 py-2">{row.status}</td>
+											<td className="border-b px-2 py-2">{row.credit_status}</td>
+											<td className="border-b px-2 py-2">{row.credit_error || "—"}</td>
+											<td className="border-b px-2 py-2">
+												<button
+													type="button"
+													disabled={retryingReconciliation}
+													onClick={async () => {
+														try {
+															await retryReconciliation({ job_name: row.name });
+															await refreshReconciliation();
+														} catch (error) {
+															console.error(parseFrappeError(error));
+														}
+													}}
+													className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+												>
+													Retry
+												</button>
+											</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						</div>
 					)}
 				</section>
 			)}

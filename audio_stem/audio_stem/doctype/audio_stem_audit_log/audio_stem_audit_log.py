@@ -11,4 +11,5 @@ class AudioStemAuditLog(frappe.model.document.Document):
 			frappe.throw(_("Audio Stem Audit Log entries cannot be modified."))
 
 	def on_trash(self):
-		frappe.throw(_("Audio Stem Audit Log entries cannot be deleted."))
+		if not frappe.flags.get("ignore_audit_log_delete"):
+			frappe.throw(_("Audio Stem Audit Log entries cannot be deleted."))

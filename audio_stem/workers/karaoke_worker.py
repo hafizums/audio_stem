@@ -8,7 +8,11 @@ from frappe import _
 from frappe.utils import cint, now_datetime
 
 from audio_stem.utils.audit_log import log_audit
-from audio_stem.utils.cancellation import should_stop_for_cancellation
+from audio_stem.utils.cancellation import (
+	cancellation_requested_for_job,
+	finalize_karaoke_cancelled,
+	should_stop_for_cancellation,
+)
 from audio_stem.utils.errors import safe_error_message
 from audio_stem.utils.karaoke_subtitles import (
 	build_karaoke_ass_with_engine,
@@ -30,9 +34,11 @@ def process_karaoke_render(name: str, template: str | None = None):
 	style_preset = resolve_karaoke_style_preset(template, job=job)
 
 	if should_stop_for_cancellation(job):
-		job.karaoke_status = "Cancelled"
-		job.karaoke_completed_at = now_datetime()
-		job.save(ignore_permissions=True)
+		finalize_karaoke_cancelled(
+			job,
+			previous_video=previous_video,
+			previous_ass=previous_ass,
+		)
 		log_audit("Fail Karaoke", reference_doctype=job.doctype, reference_name=job.name, message="Karaoke cancelled.")
 		return
 
@@ -48,6 +54,16 @@ def process_karaoke_render(name: str, template: str | None = None):
 	video_generated = False
 
 	try:
+		if cancellation_requested_for_job(job.name):
+			finalize_karaoke_cancelled(
+				job,
+				previous_video=previous_video,
+				previous_ass=previous_ass,
+				message=_("Karaoke rendering cancelled before ASS generation."),
+			)
+			log_audit("Fail Karaoke", reference_doctype=job.doctype, reference_name=job.name, message="Karaoke cancelled.")
+			return
+
 		transcript_data = load_karaoke_transcript_data(job)
 		karaoke_data = build_karaoke_words_json(job, transcript_data)
 		write_karaoke_json(job, karaoke_data)
@@ -58,9 +74,35 @@ def process_karaoke_render(name: str, template: str | None = None):
 		job.karaoke_engine_version = get_karaoke_engine_version()
 		job.save(ignore_permissions=True)
 
+		if cancellation_requested_for_job(job.name):
+			finalize_karaoke_cancelled(
+				job,
+				previous_video=previous_video,
+				previous_ass=previous_ass,
+				message=_("Karaoke rendering cancelled before video render."),
+			)
+			log_audit("Fail Karaoke", reference_doctype=job.doctype, reference_name=job.name, message="Karaoke cancelled.")
+			return
+
 		if video_render_enabled:
 			render_karaoke_video_with_engine(job, style_preset=style_preset)
 			video_generated = True
+
+			if cancellation_requested_for_job(job.name):
+				finalize_karaoke_cancelled(
+					job,
+					previous_video=previous_video,
+					previous_ass=previous_ass,
+					message=_("Karaoke rendering cancelled after video render."),
+				)
+				log_audit(
+					"Fail Karaoke",
+					reference_doctype=job.doctype,
+					reference_name=job.name,
+					message="Karaoke cancelled after video render.",
+				)
+				return
+
 			job.karaoke_error = None
 		else:
 			job.karaoke_error = _("ASS subtitle generated. Video render is disabled.")
@@ -78,6 +120,15 @@ def process_karaoke_render(name: str, template: str | None = None):
 		)
 	except Exception as exc:
 		job.reload()
+		if should_stop_for_cancellation(job):
+			finalize_karaoke_cancelled(
+				job,
+				previous_video=previous_video,
+				previous_ass=previous_ass,
+			)
+			log_audit("Fail Karaoke", reference_doctype=job.doctype, reference_name=job.name, message="Karaoke cancelled.")
+			return
+
 		if previous_video:
 			job.karaoke_video_file = previous_video
 		if previous_ass and not ass_generated:

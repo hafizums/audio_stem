@@ -18,6 +18,10 @@
   "retention_days",
   "delete_original_after_completion",
   "delete_outputs_after_retention",
+  "delete_transcripts_after_retention",
+  "delete_manual_transcripts_after_retention",
+  "delete_zip_after_retention",
+  "audit_log_retention_days",
   "section_break_notifications",
   "notify_user_on_completion",
   "notify_user_on_failure",
@@ -170,6 +174,31 @@
    "fieldname": "delete_outputs_after_retention",
    "fieldtype": "Check",
    "label": "Delete Outputs After Retention"
+  },
+  {
+   "default": "0",
+   "fieldname": "delete_transcripts_after_retention",
+   "fieldtype": "Check",
+   "label": "Delete Transcripts After Retention"
+  },
+  {
+   "default": "0",
+   "fieldname": "delete_manual_transcripts_after_retention",
+   "fieldtype": "Check",
+   "label": "Delete Manual Transcripts After Retention"
+  },
+  {
+   "default": "0",
+   "fieldname": "delete_zip_after_retention",
+   "fieldtype": "Check",
+   "label": "Delete ZIP After Retention"
+  },
+  {
+   "default": "0",
+   "fieldname": "audit_log_retention_days",
+   "fieldtype": "Int",
+   "label": "Audit Log Retention Days",
+   "non_negative": 1
   },
   {
    "fieldname": "section_break_notifications",

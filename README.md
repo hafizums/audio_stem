@@ -204,13 +204,27 @@ Production usability, admin control, retry, ZIP download, cleanup, reporting, an
 | `retention_days` | 7 | Age threshold for terminal jobs |
 | `delete_original_after_completion` | 0 | Remove original private file for old completed jobs |
 | `delete_outputs_after_retention` | 0 | Remove local outputs and clear external URLs after retention |
+| `delete_transcripts_after_retention` | 0 | Remove Whisper transcript JSON/SRT/VTT after retention |
+| `delete_manual_transcripts_after_retention` | 0 | Remove manual transcript assets after retention |
+| `delete_zip_after_retention` | 0 | Remove job ZIP after retention |
+| `audit_log_retention_days` | 0 | Delete audit logs older than N days (`0` = keep forever) |
+
+### Downstream stale assets (Gate 10 Phase 2)
+
+When separation is **retried successfully** after transcription/karaoke existed:
+
+- Job fields: `downstream_assets_stale`, `downstream_stale_reason`, `downstream_invalidated_at`
+- Transcription/karaoke statuses reset to `Not Started`; old files remain for audit but are hidden from “current” downloads
+- Re-transcribe to clear the stale flag
 
 ### Cleanup scheduler
 
 Runs daily via `scheduler_events` when `cleanup_enabled` is on:
 
 - Targets `Completed`, `Failed`, and `Cancelled` jobs older than `retention_days`
-- Does not delete job records or credit data
+- Skips jobs with active separation/transcription/karaoke pipeline work
+- Does not delete job records, credit data, or site default background video
+- Optionally prunes audit logs when `audit_log_retention_days > 0`
 - Idempotent; records notes in `cleanup_notes`
 
 Manual run:
@@ -375,7 +389,8 @@ bench --site <your-site> run-tests --app audio_stem
 | Insufficient credits | Balance too low | Grant credits in Credit Management; check `credit_status` |
 | `credit_status = Reconciliation Required` | Separation succeeded but credit consume failed | System Manager: `get_credit_reconciliation_issues` / `retry_credit_reconciliation`; outputs are kept |
 | Karaoke/video render hangs | FFmpeg transcode stuck | Check `karaoke_ffmpeg_timeout_seconds` (default 1800s); worker should fail with safe timeout message |
-| Cannot restart transcription/karaoke | Status was `Cancelled` | Re-start is allowed from `Cancelled` (Gate 10); use Start in UI/API |
+| Cannot restart transcription/karaoke | Status was `Cancelled` | Re-start is allowed from `Cancelled` (Gate 10 Phase 1) |
+| Transcript/karaoke downloads missing after retry | Downstream assets marked stale | Re-transcribe and re-render karaoke; stale banner explains why |
 | `Not permitted` on job create | Using another user's uploaded file | Upload your own file or ask System Manager |
 | WaveSpeed API key missing | Settings not configured | Configuration checklist; set key in Audio Separation Settings |
 | Duration cannot be detected | Unsupported/corrupt audio | Re-upload MP3/WAV; check file metadata |
@@ -414,8 +429,14 @@ API: `audio_stem.api.separation.cancel_job(job_name)`
 
 - Owner or System Manager only.
 - `Draft` / `Queued`: immediate cancel and credit reservation release when credits are enabled.
-- `Uploading` / `Processing`: sets `cancellation_requested`; worker stops before provider when possible. If the provider call already finished, the job may still complete safely.
+- `Uploading` / `Processing`: sets `cancellation_requested`; worker stops before/after provider when possible.
+- **Completed** jobs with active transcription/karaoke: sets `cancellation_requested`; workers cancel cooperatively without committing partial assets.
 - Job fields: `cancellation_requested`, `cancelled_at`, `cancelled_by`, `cancel_reason`.
+
+### Credit reconciliation UI (Gate 10)
+
+- Job detail shows `credit_error` and a **Reconciliation** badge when `credit_status = Reconciliation Required`.
+- System Managers: Admin Tools → **Credit Reconciliation** tab (`get_credit_reconciliation_issues`, `retry_credit_reconciliation`).
 
 ### Queue health (System Manager)
 

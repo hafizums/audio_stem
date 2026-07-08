@@ -177,6 +177,8 @@ def _zip_file_exists(file_url: str) -> bool:
 def _can_download_zip(job) -> bool:
 	if job.status != "Completed":
 		return False
+	if cint(job.get("downstream_assets_stale")):
+		return False
 	if _has_zip_output(job):
 		return True
 	return _has_vocal_output(job) and _has_instrumental_output(job)
@@ -259,10 +261,20 @@ def _job_payload(job):
 
 
 def _job_detail_payload(job):
+	from audio_stem.utils.output_reconciliation import sync_karaoke_output_fields_from_files
+
+	if (job.karaoke_status or "Not Started") == "Completed":
+		sync_karaoke_output_fields_from_files(job)
+
 	can_start, blocked_reason = _can_start_job(job)
 	can_retry, retry_blocked_reason = _can_retry_job(job)
 	can_cancel, cancel_blocked_reason = _can_cancel_job(job)
 	credit_enabled = _credit_settings_flag_enabled()
+	from audio_stem.utils.credit_reconciliation import is_credit_reconciliation_needed
+
+	reconciliation_required = bool(
+		credit_enabled and (job.credit_status == "Reconciliation Required" or is_credit_reconciliation_needed(job))
+	)
 	return {
 		"name": job.name,
 		"status": job.status,
@@ -303,6 +315,7 @@ def _job_detail_payload(job):
 		"consumed_amount": flt(job.consumed_amount),
 		"credit_type": job.credit_type,
 		"credit_error": job.credit_error,
+		"reconciliation_required": reconciliation_required,
 		**_transcription_karaoke_payload(job),
 	}
 
@@ -337,6 +350,8 @@ def _karaoke_audio_source_label(job) -> str:
 def _can_edit_transcript(job) -> bool:
 	from audio_stem.utils.transcription_karaoke_controls import KARAOKE_ACTIVE_STATUSES, karaoke_queue_is_stale
 
+	if cint(job.get("downstream_assets_stale")):
+		return False
 	if (job.transcription_status or "Not Started") != "Completed":
 		return False
 	if not job.transcript_json_file:
@@ -408,6 +423,7 @@ def _get_accessible_background_file(file_url: str):
 
 
 def _transcription_karaoke_payload(job):
+	from audio_stem.utils.downstream_assets import downstream_assets_payload
 	from audio_stem.utils.transcription_karaoke_controls import (
 		can_start_karaoke,
 		can_start_transcription,
@@ -420,6 +436,7 @@ def _transcription_karaoke_payload(job):
 	settings = get_settings()
 	can_transcribe, transcription_blocked_reason = can_start_transcription(job)
 	can_karaoke, karaoke_blocked_reason = can_start_karaoke(job)
+	downstream = downstream_assets_payload(job)
 	return {
 		"openai_enabled": is_openai_transcription_enabled(),
 		"karaoke_enabled": is_karaoke_enabled(),
@@ -488,6 +505,7 @@ def _transcription_karaoke_payload(job):
 		"karaoke_rendered_transcript_source_label": _karaoke_rendered_transcript_source_label(job),
 		"can_edit_transcript": _can_edit_transcript(job),
 		**_karaoke_background_payload(job),
+		**downstream,
 	}
 
 

@@ -11,7 +11,8 @@ from frappe.utils.file_manager import get_file_path
 from audio_stem.integrations.wavespeed_client import isolate_vocal_and_instrumental
 from audio_stem.utils.audit_log import log_audit
 from audio_stem.utils.cancellation import finalize_cancelled_job, should_stop_for_cancellation
-from audio_stem.utils.credit_reconciliation import CREDIT_RECONCILIATION_STATUS
+from audio_stem.utils.credit_reconciliation import CREDIT_RECONCILIATION_STATUS, is_credit_reconciliation_needed
+from audio_stem.utils.downstream_assets import invalidate_downstream_assets, job_had_downstream_assets
 from audio_stem.utils.errors import safe_error_message
 from audio_stem.utils.limits import calculate_provider_cost, get_settings
 from audio_stem.utils.output_storage import maybe_store_outputs_locally
@@ -140,6 +141,7 @@ def process_audio_separation(name: str):
 
 		settings = get_settings()
 		job.provider_cost_usd = calculate_provider_cost(job.duration_seconds, settings)
+		had_downstream = job_had_downstream_assets(job)
 		job.vocal_output_url = result.vocal_url
 		job.instrumental_output_url = result.instrumental_url
 
@@ -150,6 +152,10 @@ def process_audio_separation(name: str):
 		job.error_message = storage_warning
 		job.save(ignore_permissions=True)
 		frappe.db.commit()
+
+		if had_downstream:
+			job.reload()
+			invalidate_downstream_assets(job)
 
 		job.reload()
 		_consume_job_credits_if_needed(job)

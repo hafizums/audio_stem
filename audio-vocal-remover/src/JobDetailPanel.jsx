@@ -601,17 +601,17 @@ function DownloadsTab({
 			links: [
 				{
 					label: "Transcript JSON",
-					available: !!job.has_transcript_json,
+					available: !!(job.has_current_transcript_json ?? job.has_transcript_json),
 					onClick: () => onDownloadTranscript(job.name, "json"),
 				},
 				{
 					label: "Transcript SRT",
-					available: !!job.has_transcript_srt,
+					available: !!(job.has_current_transcript_srt ?? job.has_transcript_srt),
 					onClick: () => onDownloadTranscript(job.name, "srt"),
 				},
 				{
 					label: "Transcript VTT",
-					available: !!job.has_transcript_vtt,
+					available: !!(job.has_current_transcript_vtt ?? job.has_transcript_vtt),
 					onClick: () => onDownloadTranscript(job.name, "vtt"),
 				},
 			],
@@ -621,7 +621,7 @@ function DownloadsTab({
 			links: [
 				{
 					label: "Manual JSON",
-					available: !!job.has_manual_transcript,
+					available: !!(job.has_current_manual_transcript ?? job.has_manual_transcript),
 					onClick: () => onDownloadManualTranscript(job.name, "json"),
 				},
 				{
@@ -641,13 +641,13 @@ function DownloadsTab({
 			links: [
 				{
 					label: "Karaoke ASS",
-					available: !!(job.has_karaoke_ass || job.karaoke_ass_file),
-					href: job.karaoke_ass_file,
+					available: !!(job.has_current_karaoke_ass ?? (job.has_karaoke_ass || job.karaoke_ass_file)),
+					href: job.has_current_karaoke_ass ? job.karaoke_ass_file : null,
 				},
 				{
 					label: "Karaoke MP4",
-					available: !!job.karaoke_video_file,
-					href: job.karaoke_video_file,
+					available: !!(job.has_current_karaoke_video && job.karaoke_video_file),
+					href: job.has_current_karaoke_video ? job.karaoke_video_file : null,
 				},
 			],
 		},
@@ -785,7 +785,14 @@ export default function JobDetailPanel({
 					</CompactDetailRow>
 					{settings?.credit_management_enabled && (
 						<CompactDetailRow label="Credit status">
-							{job.credit_status || "—"}
+							<span className="inline-flex items-center gap-2">
+								{job.credit_status || "—"}
+								{job.reconciliation_required && (
+									<span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+										Reconciliation
+									</span>
+								)}
+							</span>
 						</CompactDetailRow>
 					)}
 				</dl>
@@ -797,6 +804,33 @@ export default function JobDetailPanel({
 				{(isProgress || job.is_transcription_active || job.is_karaoke_active) && (
 					<div className="mt-3">
 						<ProcessingNotice job={job} statusMessage={statusMessage} />
+					</div>
+				)}
+
+				{job.downstream_assets_stale && (
+					<div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+						<p className="font-medium">Downstream assets are stale</p>
+						<p className="mt-1 text-xs text-amber-800">
+							{job.downstream_stale_reason ||
+								"Audio separation was regenerated. Re-run transcription and karaoke."}
+						</p>
+					</div>
+				)}
+
+				{settings?.credit_management_enabled && (job.reconciliation_required || job.credit_error) && (
+					<div className="mt-3 space-y-2">
+						{job.reconciliation_required && (
+							<div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+								<p className="font-medium">Credit reconciliation required</p>
+								<p className="mt-1 text-xs text-amber-800">
+									Separation completed but credits may not have been consumed.
+									{settings?.is_system_manager
+										? " Open Admin Tools → Credit Reconciliation to retry."
+										: " Please contact an administrator."}
+								</p>
+							</div>
+						)}
+						<SafeErrorNotice message={job.credit_error} />
 					</div>
 				)}
 

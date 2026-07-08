@@ -10,7 +10,12 @@ from frappe.utils import now_datetime
 
 from audio_stem.integrations.openai_transcription_client import transcribe_with_whisper
 from audio_stem.utils.audit_log import log_audit
-from audio_stem.utils.cancellation import should_stop_for_cancellation
+from audio_stem.utils.cancellation import (
+	cancellation_requested_for_job,
+	finalize_transcription_cancelled,
+	should_stop_for_cancellation,
+)
+from audio_stem.utils.downstream_assets import clear_downstream_stale_after_transcription_complete
 from audio_stem.utils.errors import safe_error_message
 from audio_stem.utils.limits import get_settings
 from audio_stem.utils.transcription_assets import (
@@ -29,9 +34,7 @@ def process_transcription(name: str, source: str = "Vocal", language: str | None
 	settings = get_settings()
 
 	if should_stop_for_cancellation(job):
-		job.transcription_status = "Cancelled"
-		job.transcription_completed_at = now_datetime()
-		job.save(ignore_permissions=True)
+		finalize_transcription_cancelled(job)
 		log_audit(
 			"Fail Transcription",
 			reference_doctype=job.doctype,
@@ -49,8 +52,6 @@ def process_transcription(name: str, source: str = "Vocal", language: str | None
 	job.transcription_language = language or settings.default_transcription_language
 	job.save(ignore_permissions=True)
 
-	downloaded_path = None
-	prepared_path = None
 	temp_paths = []
 
 	try:
@@ -60,7 +61,29 @@ def process_transcription(name: str, source: str = "Vocal", language: str | None
 		prepared_path, should_cleanup_prepared = prepare_audio_for_whisper(source_path)
 		if should_cleanup_prepared:
 			temp_paths.append(prepared_path)
+
+		if cancellation_requested_for_job(job.name):
+			finalize_transcription_cancelled(job)
+			log_audit(
+				"Fail Transcription",
+				reference_doctype=job.doctype,
+				reference_name=job.name,
+				message="Transcription cancelled before provider call.",
+			)
+			return
+
 		transcript_data = transcribe_with_whisper(prepared_path, language=language)
+
+		if cancellation_requested_for_job(job.name):
+			finalize_transcription_cancelled(job)
+			log_audit(
+				"Fail Transcription",
+				reference_doctype=job.doctype,
+				reference_name=job.name,
+				message="Transcription cancelled after provider returned.",
+			)
+			return
+
 		job.transcript_text = transcript_data.get("text")
 		write_transcript_json(job, transcript_data)
 		write_srt_from_segments_or_words(job, transcript_data)
@@ -70,6 +93,7 @@ def process_transcription(name: str, source: str = "Vocal", language: str | None
 		)
 		job.transcription_status = "Completed"
 		job.transcription_completed_at = now_datetime()
+		clear_downstream_stale_after_transcription_complete(job)
 		job.save(ignore_permissions=True)
 		log_audit(
 			"Complete Transcription",
@@ -79,6 +103,15 @@ def process_transcription(name: str, source: str = "Vocal", language: str | None
 		)
 	except Exception as exc:
 		job.reload()
+		if should_stop_for_cancellation(job):
+			finalize_transcription_cancelled(job)
+			log_audit(
+				"Fail Transcription",
+				reference_doctype=job.doctype,
+				reference_name=job.name,
+				message="Transcription cancelled.",
+			)
+			return
 		job.transcription_status = "Failed"
 		job.transcription_error = safe_error_message(exc)
 		job.transcription_completed_at = now_datetime()

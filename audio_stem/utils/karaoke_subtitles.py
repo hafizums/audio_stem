@@ -415,6 +415,7 @@ def build_karaoke_ass_with_engine(job, *, style_preset: str | None = None) -> st
 	job.karaoke_source_transcript_file = source_file_url
 	job.karaoke_engine_version = get_karaoke_engine_version()
 	_save_karaoke_style_tracking(job)
+	job.save(ignore_permissions=True)
 
 	try:
 		os.unlink(ass_path)
@@ -487,6 +488,7 @@ def render_karaoke_video_with_engine(job, *, style_preset: str | None = None, in
 			)
 
 		_save_karaoke_style_tracking(job)
+		job.save(ignore_permissions=True)
 
 		if created_temp_video and source_video_path:
 			job.karaoke_render_source_video_file = _attach_private_binary_file(

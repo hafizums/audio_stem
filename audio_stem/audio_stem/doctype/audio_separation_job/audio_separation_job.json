@@ -31,6 +31,9 @@
   "section_break_meta",
   "error_message",
   "cleanup_notes",
+  "downstream_assets_stale",
+  "downstream_stale_reason",
+  "downstream_invalidated_at",
   "section_break_cancellation",
   "cancellation_requested",
   "cancelled_at",
@@ -252,6 +255,25 @@
    "fieldname": "cleanup_notes",
    "fieldtype": "Small Text",
    "label": "Cleanup Notes",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "downstream_assets_stale",
+   "fieldtype": "Check",
+   "label": "Downstream Assets Stale",
+   "read_only": 1
+  },
+  {
+   "fieldname": "downstream_stale_reason",
+   "fieldtype": "Small Text",
+   "label": "Downstream Stale Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "downstream_invalidated_at",
+   "fieldtype": "Datetime",
+   "label": "Downstream Invalidated At",
    "read_only": 1
   },
   {
