@@ -422,6 +422,29 @@ def _get_accessible_background_file(file_url: str):
 	return file_doc
 
 
+def _llm_assistant_payload(job, settings=None) -> dict:
+	from audio_stem.integrations.llm_provider import get_llm_assistant_blocked_reason, is_llm_assistant_enabled
+	from audio_stem.utils.llm_assistant_controls import can_start_llm_suggestion, llm_queue_is_stale
+	from audio_stem.utils.lyric_assistant import get_llm_suggestion_payload
+
+	settings = settings or get_settings()
+	can_start, blocked_reason = can_start_llm_suggestion(job, settings=settings)
+	payload = get_llm_suggestion_payload(job)
+	return {
+		"llm_assistant_enabled": is_llm_assistant_enabled(settings),
+		"llm_assistant_blocked_reason": get_llm_assistant_blocked_reason(settings),
+		"wavespeed_llm_model": settings.wavespeed_llm_model or "deepseek/deepseek-v4-flash",
+		"wavespeed_llm_require_manual_approval": bool(cint(settings.wavespeed_llm_require_manual_approval)),
+		"can_start_llm_suggestion": can_start,
+		"llm_suggestion_blocked_reason": blocked_reason,
+		"is_llm_suggestion_active": (
+			(job.get("llm_suggestion_status") in ("Queued", "Processing"))
+			and not llm_queue_is_stale(job)
+		),
+		**payload,
+	}
+
+
 def _transcription_karaoke_payload(job):
 	from audio_stem.utils.downstream_assets import downstream_assets_payload
 	from audio_stem.utils.transcription_karaoke_controls import (
@@ -548,6 +571,7 @@ def _transcription_karaoke_payload(job):
 		"can_edit_transcript": _can_edit_transcript(job),
 		**_karaoke_background_payload(job),
 		**downstream,
+		**_llm_assistant_payload(job, settings=settings),
 	}
 
 
@@ -724,6 +748,7 @@ def get_page_settings():
 	_require_login()
 	from audio_stem.integrations.credit_management_client import get_audio_credit_type, is_credit_management_enabled
 	from audio_stem.integrations.elevenlabs_scribe_client import is_elevenlabs_scribe_enabled
+	from audio_stem.integrations.llm_provider import is_llm_assistant_enabled
 	from audio_stem.integrations.transcription_provider import (
 		PROVIDER_ELEVENLABS,
 		PROVIDER_OPENAI,
@@ -777,6 +802,9 @@ def get_page_settings():
 		"elevenlabs_no_verbatim": bool(cint(settings.elevenlabs_no_verbatim)),
 		"elevenlabs_tag_audio_events": bool(cint(settings.elevenlabs_tag_audio_events)),
 		"elevenlabs_diarize": bool(cint(settings.elevenlabs_diarize)),
+		"llm_assistant_enabled": is_llm_assistant_enabled(),
+		"wavespeed_llm_model": settings.wavespeed_llm_model or "deepseek/deepseek-v4-flash",
+		"wavespeed_llm_require_manual_approval": bool(cint(settings.wavespeed_llm_require_manual_approval)),
 		**karaoke_style_settings_payload(),
 	}
 
@@ -1584,3 +1612,159 @@ def download_manual_transcript_asset(job_name: str, asset_type: str):
 	if not fieldname or not job.get(fieldname):
 		frappe.throw(_("Manual transcript file is not available."), frappe.DoesNotExistError)
 	return {"file_url": job.get(fieldname), "asset_type": asset_type}
+
+
+def _require_llm_assistant(job):
+	from audio_stem.integrations.llm_provider import get_llm_assistant_blocked_reason, is_llm_assistant_enabled
+
+	if not is_llm_assistant_enabled():
+		frappe.throw(get_llm_assistant_blocked_reason() or _("LLM lyric assistant is disabled."), frappe.ValidationError)
+	if (job.transcription_status or "Not Started") != "Completed":
+		frappe.throw(_("Completed transcription is required."), frappe.ValidationError)
+
+
+@frappe.whitelist()
+def start_llm_transcript_suggestion(
+	job_name: str,
+	task: str = "repair_transcript",
+	lyrics_text: str | None = None,
+	language_hint: str | None = None,
+):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+	_require_llm_assistant(job)
+
+	from audio_stem.integrations.llm_provider import normalize_task_name
+	from audio_stem.utils.audit_log import log_audit
+	from audio_stem.utils.llm_assistant_controls import (
+		can_start_llm_suggestion,
+		enqueue_llm_suggestion,
+		llm_queue_is_stale,
+	)
+
+	task_name = normalize_task_name(task)
+	can_start, blocked_reason = can_start_llm_suggestion(job)
+	if not can_start:
+		if not (
+			(job.llm_suggestion_status or "Not Started") in ("Queued", "Processing")
+			and llm_queue_is_stale(job)
+		):
+			frappe.throw(blocked_reason or _("LLM suggestion cannot be started."), frappe.ValidationError)
+
+	enqueue_llm_suggestion(job, task=task_name, lyrics_text=lyrics_text, language_hint=language_hint)
+	log_audit(
+		"Start LLM Suggestion",
+		reference_doctype=job.doctype,
+		reference_name=job.name,
+		message=f"Queued LLM suggestion ({task_name}).",
+		metadata={"task": task_name},
+	)
+	job.reload()
+	return {**_job_detail_payload(job), **_llm_assistant_payload(job)}
+
+
+@frappe.whitelist()
+def get_llm_suggestion(job_name: str):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+	return _llm_assistant_payload(job)
+
+
+@frappe.whitelist()
+def accept_llm_suggestion_as_manual_draft(job_name: str):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+	if not _can_edit_transcript(job):
+		frappe.throw(_("Transcript editing is not available for this job."), frappe.ValidationError)
+	_require_llm_assistant(job)
+
+	from audio_stem.utils.audit_log import log_audit
+	from audio_stem.utils.lyric_assistant import create_manual_draft_from_llm_suggestion
+
+	if (job.llm_suggestion_status or "Not Started") != "Completed":
+		frappe.throw(_("A completed LLM suggestion is required before accepting."), frappe.ValidationError)
+
+	result = create_manual_draft_from_llm_suggestion(job)
+	log_audit(
+		"Accept LLM Suggestion",
+		reference_doctype=job.doctype,
+		reference_name=job.name,
+		message="Accepted LLM suggestion as manual transcript draft.",
+	)
+	job.reload()
+	return {**result, **_manual_transcript_payload(job), **_job_detail_payload(job)}
+
+
+@frappe.whitelist()
+def suggest_scribe_keyterms(job_name: str, lyrics_text: str | None = None, language_hint: str | None = None):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+	_require_llm_assistant(job)
+
+	from audio_stem.utils.lyric_assistant import suggest_keyterms_from_lyrics
+
+	text = (lyrics_text or job.transcript_text or "").strip()
+	if not text:
+		frappe.throw(_("Lyrics text is required for keyterm suggestions."), frappe.ValidationError)
+
+	terms = suggest_keyterms_from_lyrics(text, language_hint=language_hint)
+	return {"keyterms": terms, "job_name": job.name}
+
+
+@frappe.whitelist()
+def split_lyrics_with_llm(job_name: str, lyrics_text: str | None = None, language_hint: str | None = None):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+	_require_llm_assistant(job)
+
+	from audio_stem.utils.audit_log import log_audit
+	from audio_stem.utils.llm_assistant_controls import can_start_llm_suggestion, enqueue_llm_suggestion
+
+	can_start, blocked_reason = can_start_llm_suggestion(job)
+	if not can_start:
+		frappe.throw(blocked_reason or _("LLM suggestion cannot be started."), frappe.ValidationError)
+
+	text = (lyrics_text or job.transcript_text or "").strip()
+	if not text:
+		frappe.throw(_("Lyrics text is required."), frappe.ValidationError)
+
+	enqueue_llm_suggestion(
+		job,
+		task="split_lyrics_lines",
+		lyrics_text=text,
+		language_hint=language_hint,
+	)
+	log_audit(
+		"Start LLM Suggestion",
+		reference_doctype=job.doctype,
+		reference_name=job.name,
+		message="Queued LLM lyric line split.",
+		metadata={"task": "split_lyrics_lines"},
+	)
+	job.reload()
+	return {**_job_detail_payload(job), **_llm_assistant_payload(job)}
+
+
+@frappe.whitelist()
+def explain_transcription_quality_with_llm(job_name: str):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+	_require_llm_assistant(job)
+
+	from audio_stem.utils.audit_log import log_audit
+	from audio_stem.utils.llm_assistant_controls import can_start_llm_suggestion, enqueue_llm_suggestion
+
+	can_start, blocked_reason = can_start_llm_suggestion(job)
+	if not can_start:
+		frappe.throw(blocked_reason or _("LLM suggestion cannot be started."), frappe.ValidationError)
+
+	enqueue_llm_suggestion(job, task="explain_transcription_quality")
+	log_audit(
+		"Start LLM Suggestion",
+		reference_doctype=job.doctype,
+		reference_name=job.name,
+		message="Queued LLM transcription quality explanation.",
+		metadata={"task": "explain_transcription_quality"},
+	)
+	job.reload()
+	return {**_job_detail_payload(job), **_llm_assistant_payload(job)}

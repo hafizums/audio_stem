@@ -193,6 +193,208 @@ function SegmentTimeline({ segments, duration, activeIndex, onSelect }) {
 	);
 }
 
+function LyricAssistantCard({
+	job,
+	settings,
+	disabled,
+	saving,
+	onStartLlmSuggestion,
+	onAcceptLlmSuggestion,
+	onSuggestKeyterms,
+	onSplitLyricsWithLlm,
+	onExplainQualityWithLlm,
+	onJobUpdated,
+	onAcceptedSuggestion,
+	setActionError,
+}) {
+	const [assistantBusy, setAssistantBusy] = useState(false);
+	const [referenceLyrics, setReferenceLyrics] = useState("");
+	const [keytermResult, setKeytermResult] = useState([]);
+
+	if (!settings?.llm_assistant_enabled && !job?.llm_assistant_enabled) {
+		return null;
+	}
+
+	const llmDisabled = disabled || saving || assistantBusy || job?.is_llm_suggestion_active;
+	const suggestion = job?.suggestion;
+	const requiresReview =
+		suggestion?.requires_manual_review || settings?.wavespeed_llm_require_manual_approval;
+
+	const runAssistant = async (label, action) => {
+		setAssistantBusy(true);
+		setActionError(null);
+		try {
+			await action();
+			await onJobUpdated?.();
+		} catch (err) {
+			setActionError(parseFrappeError(err) || err.message || `Failed to ${label}`);
+		} finally {
+			setAssistantBusy(false);
+		}
+	};
+
+	return (
+		<Card title="AI Lyric Assistant">
+			{!job?.llm_assistant_enabled ? (
+				<p className="text-sm text-gray-500">{job?.llm_assistant_blocked_reason || "LLM assistant is not configured."}</p>
+			) : (
+				<div className="space-y-4">
+					<p className="text-sm text-gray-600">
+						WaveSpeed LLM can suggest lyric fixes, split lines, propose Scribe keyterms, or explain
+						transcription quality. Suggestions never overwrite your original transcript until you
+						accept them.
+					</p>
+
+					<div className="flex flex-wrap items-center gap-2 text-xs">
+						<StatusBadge status={job.llm_suggestion_status || "Not Started"} />
+						{job.llm_suggestion_model && (
+							<span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-gray-700">
+								{job.llm_suggestion_model}
+							</span>
+						)}
+						{requiresReview && (
+							<span className="rounded-full bg-amber-100 px-2.5 py-0.5 font-medium text-amber-900">
+								Manual review required
+							</span>
+						)}
+					</div>
+
+					{job.is_llm_suggestion_active && (
+						<p className="text-sm text-blue-700">Generating LLM suggestion…</p>
+					)}
+					{job.llm_suggestion_error && <SafeErrorNotice message={job.llm_suggestion_error} />}
+
+					<label className="block text-sm text-gray-700">
+						Reference lyrics (optional)
+						<textarea
+							className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+							rows={2}
+							value={referenceLyrics}
+							onChange={(event) => setReferenceLyrics(event.target.value)}
+							placeholder="Paste chorus or reference lyrics to guide repair…"
+							disabled={llmDisabled}
+						/>
+					</label>
+
+					<div className="flex flex-wrap gap-2">
+						<SecondaryButton
+							disabled={llmDisabled || !job.can_start_llm_suggestion}
+							onClick={() =>
+								runAssistant("start lyric correction", () =>
+									onStartLlmSuggestion(job.name, {
+										task: "repair_transcript",
+										lyricsText: referenceLyrics || undefined,
+									})
+								)
+							}
+						>
+							Suggest lyric corrections
+						</SecondaryButton>
+						<SecondaryButton
+							disabled={llmDisabled || !job.can_start_llm_suggestion}
+							onClick={() =>
+								runAssistant("split lyrics", () =>
+									onSplitLyricsWithLlm(job.name, referenceLyrics || job.transcript_text)
+								)
+							}
+						>
+							Split lyrics into karaoke lines
+						</SecondaryButton>
+						<SecondaryButton
+							disabled={llmDisabled}
+							onClick={() =>
+								runAssistant("suggest keyterms", async () => {
+									const result = await onSuggestKeyterms(
+										job.name,
+										referenceLyrics || job.transcript_text
+									);
+									setKeytermResult(result?.keyterms || []);
+								})
+							}
+						>
+							Suggest Scribe keyterms
+						</SecondaryButton>
+						<SecondaryButton
+							disabled={llmDisabled || !job.can_start_llm_suggestion}
+							onClick={() => runAssistant("explain quality", () => onExplainQualityWithLlm(job.name))}
+						>
+							Explain transcript quality
+						</SecondaryButton>
+					</div>
+
+					{job.llm_suggestion_blocked_reason && !job.can_start_llm_suggestion && (
+						<p className="text-xs text-gray-500">{job.llm_suggestion_blocked_reason}</p>
+					)}
+
+					{(job.llm_suggested_transcript_text || suggestion?.suggested_text) && (
+						<div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
+							<p className="text-xs font-medium uppercase tracking-wide text-gray-500">Suggested text</p>
+							<p className="mt-2 whitespace-pre-wrap text-sm text-gray-900">
+								{job.llm_suggested_transcript_text || suggestion?.suggested_text}
+							</p>
+						</div>
+					)}
+
+					{keytermResult.length > 0 && (
+						<div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-800">
+							<p className="text-xs font-medium uppercase tracking-wide text-gray-500">Suggested keyterms</p>
+							<p className="mt-2">{keytermResult.join(", ")}</p>
+						</div>
+					)}
+
+					{(suggestion?.warnings?.length > 0 || suggestion?.confidence_notes?.length > 0) && (
+						<div className="space-y-2 text-sm">
+							{suggestion.warnings?.length > 0 && (
+								<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+									<p className="font-medium">Warnings</p>
+									<ul className="mt-1 list-disc pl-5">
+										{suggestion.warnings.map((item) => (
+											<li key={item}>{item}</li>
+										))}
+									</ul>
+								</div>
+							)}
+							{suggestion.confidence_notes?.length > 0 && (
+								<div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-900">
+									<p className="font-medium">Notes</p>
+									<ul className="mt-1 list-disc pl-5">
+										{suggestion.confidence_notes.map((item) => (
+											<li key={item}>{item}</li>
+										))}
+									</ul>
+								</div>
+							)}
+						</div>
+					)}
+
+					{(job.llm_input_tokens > 0 || job.llm_estimated_cost_usd > 0) && (
+						<p className="text-xs text-gray-500">
+							Tokens: {job.llm_input_tokens || 0} in / {job.llm_output_tokens || 0} out
+							{job.llm_estimated_cost_usd > 0 && ` · Est. cost $${Number(job.llm_estimated_cost_usd).toFixed(4)}`}
+						</p>
+					)}
+
+					{job.llm_suggestion_status === "Completed" &&
+						job.llm_suggestion_task &&
+						!["suggest_scribe_keyterms", "explain_transcription_quality"].includes(job.llm_suggestion_task) && (
+							<SecondaryButton
+								disabled={llmDisabled}
+								onClick={() =>
+									runAssistant("accept suggestion", async () => {
+										await onAcceptLlmSuggestion(job.name);
+										await onAcceptedSuggestion?.();
+									})
+								}
+							>
+								Accept suggestion as manual draft
+							</SecondaryButton>
+						)}
+				</div>
+			)}
+		</Card>
+	);
+}
+
 const SegmentCard = memo(function SegmentCard({
 	segment,
 	index,
@@ -356,6 +558,11 @@ export default function TranscriptEditor({
 	onReset,
 	onRegenerate,
 	onDownloadManual,
+	onStartLlmSuggestion,
+	onAcceptLlmSuggestion,
+	onSuggestKeyterms,
+	onSplitLyricsWithLlm,
+	onExplainQualityWithLlm,
 	onJobUpdated,
 }) {
 	const [loading, setLoading] = useState(false);
@@ -565,6 +772,12 @@ export default function TranscriptEditor({
 		}
 	};
 
+	const reloadTranscriptAfterAccept = useCallback(async () => {
+		loadedJobRef.current = null;
+		await fetchTranscript(job.name, { force: true });
+		await onJobUpdated?.();
+	}, [fetchTranscript, job.name, onJobUpdated]);
+
 	if (job?.transcription_status !== "Completed") {
 		return null;
 	}
@@ -590,6 +803,23 @@ export default function TranscriptEditor({
 					</p>
 				)}
 			</Card>
+
+			{(settings?.llm_assistant_enabled || job?.llm_assistant_enabled) && job.can_edit_transcript && (
+				<LyricAssistantCard
+					job={job}
+					settings={settings}
+					disabled={disabled}
+					saving={saving}
+					onStartLlmSuggestion={onStartLlmSuggestion}
+					onAcceptLlmSuggestion={onAcceptLlmSuggestion}
+					onSuggestKeyterms={onSuggestKeyterms}
+					onSplitLyricsWithLlm={onSplitLyricsWithLlm}
+					onExplainQualityWithLlm={onExplainQualityWithLlm}
+					onJobUpdated={onJobUpdated}
+					onAcceptedSuggestion={reloadTranscriptAfterAccept}
+					setActionError={setActionError}
+				/>
+			)}
 
 			{job.can_edit_transcript && (
 				<>

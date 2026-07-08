@@ -24,4 +24,6 @@ class AudioSeparationSettings(Document):
 			resolve_scribe_model(self.elevenlabs_scribe_model)
 		if cint(self.elevenlabs_use_keyterms):
 			validate_keyterms(parse_keyterms(self.elevenlabs_keyterms))
+		if self.wavespeed_llm_base_url and not (self.wavespeed_llm_base_url or "").strip().startswith("http"):
+			frappe.throw(_("WaveSpeed LLM base URL must be a valid HTTP URL."), frappe.ValidationError)
 

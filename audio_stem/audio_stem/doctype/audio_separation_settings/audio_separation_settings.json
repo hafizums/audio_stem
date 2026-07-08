@@ -78,6 +78,19 @@
   "elevenlabs_timeout_seconds",
   "elevenlabs_cost_per_hour_usd",
   "elevenlabs_keyterm_cost_per_hour_usd",
+  "section_break_llm_assistant",
+  "llm_assistant_enabled",
+  "llm_provider",
+  "wavespeed_llm_api_key",
+  "wavespeed_llm_base_url",
+  "wavespeed_llm_model",
+  "wavespeed_llm_reasoning_model",
+  "wavespeed_llm_timeout_seconds",
+  "wavespeed_llm_max_input_chars",
+  "wavespeed_llm_temperature",
+  "wavespeed_llm_require_manual_approval",
+  "wavespeed_llm_input_cost_per_million_tokens",
+  "wavespeed_llm_output_cost_per_million_tokens",
   "section_break_karaoke",
   "karaoke_enabled",
   "karaoke_ass_enabled",
@@ -565,6 +578,85 @@
    "fieldname": "elevenlabs_keyterm_cost_per_hour_usd",
    "fieldtype": "Currency",
    "label": "ElevenLabs Keyterm Cost Per Hour (USD)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "section_break_llm_assistant",
+   "fieldtype": "Section Break",
+   "label": "WaveSpeed LLM Lyric Assistant"
+  },
+  {
+   "default": "0",
+   "fieldname": "llm_assistant_enabled",
+   "fieldtype": "Check",
+   "label": "LLM Assistant Enabled"
+  },
+  {
+   "default": "WaveSpeed LLM",
+   "fieldname": "llm_provider",
+   "fieldtype": "Select",
+   "label": "LLM Provider",
+   "options": "WaveSpeed LLM"
+  },
+  {
+   "fieldname": "wavespeed_llm_api_key",
+   "fieldtype": "Password",
+   "label": "WaveSpeed LLM API Key"
+  },
+  {
+   "default": "https://llm.wavespeed.ai/v1",
+   "fieldname": "wavespeed_llm_base_url",
+   "fieldtype": "Data",
+   "label": "WaveSpeed LLM Base URL"
+  },
+  {
+   "default": "deepseek/deepseek-v4-flash",
+   "fieldname": "wavespeed_llm_model",
+   "fieldtype": "Data",
+   "label": "WaveSpeed LLM Model"
+  },
+  {
+   "default": "deepseek/deepseek-v4-pro",
+   "fieldname": "wavespeed_llm_reasoning_model",
+   "fieldtype": "Data",
+   "label": "WaveSpeed LLM Reasoning Model"
+  },
+  {
+   "default": "120",
+   "fieldname": "wavespeed_llm_timeout_seconds",
+   "fieldtype": "Int",
+   "label": "WaveSpeed LLM Timeout (seconds)",
+   "non_negative": 1
+  },
+  {
+   "default": "12000",
+   "fieldname": "wavespeed_llm_max_input_chars",
+   "fieldtype": "Int",
+   "label": "WaveSpeed LLM Max Input Characters",
+   "non_negative": 1
+  },
+  {
+   "default": "0.2",
+   "fieldname": "wavespeed_llm_temperature",
+   "fieldtype": "Float",
+   "label": "WaveSpeed LLM Temperature"
+  },
+  {
+   "default": "1",
+   "fieldname": "wavespeed_llm_require_manual_approval",
+   "fieldtype": "Check",
+   "label": "Require Manual Approval For LLM Suggestions"
+  },
+  {
+   "fieldname": "wavespeed_llm_input_cost_per_million_tokens",
+   "fieldtype": "Currency",
+   "label": "WaveSpeed LLM Input Cost Per Million Tokens (USD)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "wavespeed_llm_output_cost_per_million_tokens",
+   "fieldtype": "Currency",
+   "label": "WaveSpeed LLM Output Cost Per Million Tokens (USD)",
    "non_negative": 1
   },
   {

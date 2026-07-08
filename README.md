@@ -881,6 +881,33 @@ OpenAI **Whisper** remains the default provider. **ElevenLabs Scribe** (`scribe_
 5. Confirm provider/model, word timestamps, JSON/SRT/VTT
 6. Generate ASS/MP4 as usual
 
+### WaveSpeed LLM Lyric Assistant
+
+The **WaveSpeed LLM Lyric Assistant** is optional and backend-only. It is **not** a transcriber — ASR (Whisper/Scribe) still provides timing.
+
+| Capability | Purpose |
+| --- | --- |
+| Repair transcript text | Fix obvious ASR wording while keeping timings |
+| Split lyrics lines | Break pasted lyrics into karaoke-friendly lines |
+| Suggest Scribe keyterms | Propose keyterms for difficult local-language songs |
+| Explain quality | Summarize transcription diagnostics |
+
+**Endpoint:** OpenAI-compatible WaveSpeed LLM at `https://llm.wavespeed.ai/v1`
+
+**Rules:**
+- LLM suggestions are stored separately from the original ASR transcript
+- User must **Accept** a suggestion to create a manual draft
+- Manual transcript must still be **Approved** before karaoke uses it
+- Switch models via `wavespeed_llm_model` (e.g. `deepseek/deepseek-v4-flash`)
+
+**Manual test**
+
+1. Set WaveSpeed LLM API key and enable LLM assistant
+2. Transcribe a difficult song
+3. Open **Edit Lyrics** → **Suggest lyric corrections**
+4. Review suggestion → **Accept as manual draft**
+5. Fine-tune timing → **Approve** → generate ASS/MP4
+
 ### Run tests
 
 See the **Run tests** section near the top of this README for the recommended `audio-stem-test.local` workflow, settings snapshot/restore behavior, and cleanup guarantees.

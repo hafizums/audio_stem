@@ -344,6 +344,82 @@ def get_configuration_checklist_data() -> list[dict]:
 			_item("transcription_enabled", _("Transcription"), "warning", _("No transcription provider is enabled."))
 		)
 
+	from audio_stem.integrations.llm_provider import is_llm_assistant_enabled
+	from audio_stem.integrations.wavespeed_llm_client import is_wavespeed_llm_configured, resolve_wavespeed_llm_base_url
+
+	if cint(settings.llm_assistant_enabled):
+		if is_llm_assistant_enabled(settings):
+			items.append(
+				_item(
+					"llm_assistant_enabled",
+					_("LLM Lyric Assistant"),
+					"ok",
+					_("LLM lyric assistant is enabled."),
+				)
+			)
+			items.append(
+				_item(
+					"wavespeed_llm_api_key",
+					_("WaveSpeed LLM API Key"),
+					"ok",
+					_("WaveSpeed LLM API key is configured."),
+				)
+			)
+			items.append(
+				_item(
+					"wavespeed_llm_base_url",
+					_("WaveSpeed LLM Base URL"),
+					"ok",
+					_("Base URL: {0}").format(resolve_wavespeed_llm_base_url(settings)),
+				)
+			)
+			items.append(
+				_item(
+					"wavespeed_llm_model",
+					_("WaveSpeed LLM Model"),
+					"ok",
+					_("Model: {0}").format(settings.wavespeed_llm_model or "deepseek/deepseek-v4-flash"),
+				)
+			)
+			items.append(
+				_item(
+					"wavespeed_llm_require_manual_approval",
+					_("LLM Manual Approval"),
+					"ok" if cint(settings.wavespeed_llm_require_manual_approval) else "warning",
+					_("Manual approval is required before karaoke uses LLM suggestions.")
+					if cint(settings.wavespeed_llm_require_manual_approval)
+					else _("Manual approval is not enforced for LLM suggestions."),
+				)
+			)
+		else:
+			llm_key = (settings.get_password("wavespeed_llm_api_key", raise_exception=False) or "").strip()
+			if not llm_key:
+				items.append(
+					_item(
+						"wavespeed_llm_api_key",
+						_("WaveSpeed LLM API Key"),
+						"error",
+						_("WaveSpeed LLM API key is missing."),
+					)
+				)
+			items.append(
+				_item(
+					"llm_assistant_enabled",
+					_("LLM Lyric Assistant"),
+					"error",
+					_("LLM lyric assistant is enabled but not fully configured."),
+				)
+			)
+	else:
+		items.append(
+			_item(
+				"llm_assistant_enabled",
+				_("LLM Lyric Assistant"),
+				"warning",
+				_("LLM lyric assistant is disabled."),
+			)
+		)
+
 	if cint(settings.karaoke_enabled):
 		from audio_stem.utils.ffmpeg_media import is_ffmpeg_available, is_ffprobe_available
 		from audio_stem.utils.karaoke_subtitles import is_karaoke_engine_available

@@ -472,6 +472,11 @@ function EditLyricsTab({
 	onResetTranscript,
 	onRegenerateSubtitles,
 	onDownloadManualTranscript,
+	onStartLlmSuggestion,
+	onAcceptLlmSuggestion,
+	onSuggestKeyterms,
+	onSplitLyricsWithLlm,
+	onExplainQualityWithLlm,
 	onJobUpdated,
 }) {
 	if (job.transcription_status !== "Completed") {
@@ -493,6 +498,11 @@ function EditLyricsTab({
 			onReset={onResetTranscript}
 			onRegenerate={onRegenerateSubtitles}
 			onDownloadManual={onDownloadManualTranscript}
+			onStartLlmSuggestion={onStartLlmSuggestion}
+			onAcceptLlmSuggestion={onAcceptLlmSuggestion}
+			onSuggestKeyterms={onSuggestKeyterms}
+			onSplitLyricsWithLlm={onSplitLyricsWithLlm}
+			onExplainQualityWithLlm={onExplainQualityWithLlm}
 			onJobUpdated={onJobUpdated}
 		/>
 	);
@@ -917,6 +927,11 @@ export default function JobDetailPanel({
 	onResetTranscript,
 	onRegenerateSubtitles,
 	onDownloadManualTranscript,
+	onStartLlmSuggestion,
+	onAcceptLlmSuggestion,
+	onSuggestKeyterms,
+	onSplitLyricsWithLlm,
+	onExplainQualityWithLlm,
 	onJobUpdated,
 	onStart,
 	jobKaraokeStyle,
@@ -1091,6 +1106,11 @@ export default function JobDetailPanel({
 						onResetTranscript={onResetTranscript}
 						onRegenerateSubtitles={onRegenerateSubtitles}
 						onDownloadManualTranscript={onDownloadManualTranscript}
+						onStartLlmSuggestion={onStartLlmSuggestion}
+						onAcceptLlmSuggestion={onAcceptLlmSuggestion}
+						onSuggestKeyterms={onSuggestKeyterms}
+						onSplitLyricsWithLlm={onSplitLyricsWithLlm}
+						onExplainQualityWithLlm={onExplainQualityWithLlm}
 						onJobUpdated={onJobUpdated}
 					/>
 				)}

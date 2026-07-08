@@ -74,6 +74,18 @@
   "manual_transcript_updated_by",
   "manual_transcript_approved_at",
   "manual_transcript_approved_by",
+  "section_break_llm_suggestion",
+  "llm_suggestion_status",
+  "llm_suggestion_json_file",
+  "llm_suggested_transcript_text",
+  "llm_suggestion_error",
+  "llm_suggestion_provider",
+  "llm_suggestion_model",
+  "llm_suggestion_task",
+  "llm_suggestion_updated_at",
+  "llm_input_tokens",
+  "llm_output_tokens",
+  "llm_estimated_cost_usd",
   "section_break_karaoke",
   "karaoke_status",
   "karaoke_use_manual_transcript",
@@ -532,6 +544,79 @@
    "fieldtype": "Link",
    "label": "Manual Transcript Approved By",
    "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_llm_suggestion",
+   "fieldtype": "Section Break",
+   "label": "LLM Suggestion"
+  },
+  {
+   "default": "Not Started",
+   "fieldname": "llm_suggestion_status",
+   "fieldtype": "Select",
+   "label": "LLM Suggestion Status",
+   "options": "Not Started\nQueued\nProcessing\nCompleted\nFailed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "llm_suggestion_json_file",
+   "fieldtype": "Attach",
+   "label": "LLM Suggestion JSON File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "llm_suggested_transcript_text",
+   "fieldtype": "Long Text",
+   "label": "LLM Suggested Transcript Text",
+   "read_only": 1
+  },
+  {
+   "fieldname": "llm_suggestion_error",
+   "fieldtype": "Small Text",
+   "label": "LLM Suggestion Error",
+   "read_only": 1
+  },
+  {
+   "fieldname": "llm_suggestion_provider",
+   "fieldtype": "Data",
+   "label": "LLM Suggestion Provider",
+   "read_only": 1
+  },
+  {
+   "fieldname": "llm_suggestion_model",
+   "fieldtype": "Data",
+   "label": "LLM Suggestion Model",
+   "read_only": 1
+  },
+  {
+   "fieldname": "llm_suggestion_task",
+   "fieldtype": "Data",
+   "label": "LLM Suggestion Task",
+   "read_only": 1
+  },
+  {
+   "fieldname": "llm_suggestion_updated_at",
+   "fieldtype": "Datetime",
+   "label": "LLM Suggestion Updated At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "llm_input_tokens",
+   "fieldtype": "Int",
+   "label": "LLM Input Tokens",
+   "read_only": 1
+  },
+  {
+   "fieldname": "llm_output_tokens",
+   "fieldtype": "Int",
+   "label": "LLM Output Tokens",
+   "read_only": 1
+  },
+  {
+   "fieldname": "llm_estimated_cost_usd",
+   "fieldtype": "Currency",
+   "label": "LLM Estimated Cost (USD)",
    "read_only": 1
   },
   {

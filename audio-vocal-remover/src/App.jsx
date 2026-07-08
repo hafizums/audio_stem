@@ -447,6 +447,21 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 	const { call: resetKaraokeStyleForJob } = useFrappePostCall(
 		"audio_stem.api.separation.reset_karaoke_style_for_job"
 	);
+	const { call: startLlmSuggestion } = useFrappePostCall(
+		"audio_stem.api.separation.start_llm_transcript_suggestion"
+	);
+	const { call: acceptLlmSuggestion } = useFrappePostCall(
+		"audio_stem.api.separation.accept_llm_suggestion_as_manual_draft"
+	);
+	const { call: suggestScribeKeyterms } = useFrappePostCall(
+		"audio_stem.api.separation.suggest_scribe_keyterms"
+	);
+	const { call: splitLyricsWithLlm } = useFrappePostCall(
+		"audio_stem.api.separation.split_lyrics_with_llm"
+	);
+	const { call: explainQualityWithLlm } = useFrappePostCall(
+		"audio_stem.api.separation.explain_transcription_quality_with_llm"
+	);
 
 	const displayCurrency = job?.display_currency || settings?.display_currency || "MYR";
 	const costPerSecond = settings?.cost_per_second_usd || 0;
@@ -502,12 +517,14 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 		const shouldPoll =
 			ACTIVE_STATUSES.includes(nextJob?.status) ||
 			nextJob?.is_transcription_active ||
-			nextJob?.is_karaoke_active;
+			nextJob?.is_karaoke_active ||
+			nextJob?.is_llm_suggestion_active;
 		if (!shouldPoll) stopPolling();
 		if (
 			TERMINAL_STATUSES.includes(nextJob?.status) &&
 			!nextJob?.is_transcription_active &&
-			!nextJob?.is_karaoke_active
+			!nextJob?.is_karaoke_active &&
+			!nextJob?.is_llm_suggestion_active
 		) {
 			refreshRecent();
 			refreshCredit();
@@ -524,14 +541,25 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 	useEffect(() => {
 		if (
 			job &&
-			(ACTIVE_STATUSES.includes(job.status) || job.is_transcription_active || job.is_karaoke_active)
+			(ACTIVE_STATUSES.includes(job.status) ||
+				job.is_transcription_active ||
+				job.is_karaoke_active ||
+				job.is_llm_suggestion_active)
 		) {
 			startPolling();
 		} else {
 			stopPolling();
 		}
 		return () => stopPolling();
-	}, [job?.status, job?.is_transcription_active, job?.is_karaoke_active, jobName, startPolling, stopPolling]);
+	}, [
+		job?.status,
+		job?.is_transcription_active,
+		job?.is_karaoke_active,
+		job?.is_llm_suggestion_active,
+		jobName,
+		startPolling,
+		stopPolling,
+	]);
 
 	const handleFileChange = async (event) => {
 		const file = event.target.files?.[0];
@@ -811,6 +839,63 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 		},
 		[downloadManualTranscriptAsset]
 	);
+	const handleStartLlmSuggestion = useCallback(
+		async (name, options = {}) => {
+			const result = unwrapFrappeMessage(
+				await startLlmSuggestion({
+					job_name: name,
+					task: options.task || "repair_transcript",
+					lyrics_text: options.lyricsText,
+					language_hint: options.languageHint,
+				})
+			);
+			setJob((prev) => (prev?.name === name ? { ...prev, ...result } : prev));
+			return result;
+		},
+		[startLlmSuggestion]
+	);
+	const handleAcceptLlmSuggestion = useCallback(
+		async (name) => {
+			const result = unwrapFrappeMessage(await acceptLlmSuggestion({ job_name: name }));
+			setJob((prev) => (prev?.name === name ? { ...prev, ...result } : prev));
+			return result;
+		},
+		[acceptLlmSuggestion]
+	);
+	const handleSuggestKeyterms = useCallback(
+		async (name, lyricsText, languageHint) => {
+			return unwrapFrappeMessage(
+				await suggestScribeKeyterms({
+					job_name: name,
+					lyrics_text: lyricsText,
+					language_hint: languageHint,
+				})
+			);
+		},
+		[suggestScribeKeyterms]
+	);
+	const handleSplitLyricsWithLlm = useCallback(
+		async (name, lyricsText, languageHint) => {
+			const result = unwrapFrappeMessage(
+				await splitLyricsWithLlm({
+					job_name: name,
+					lyrics_text: lyricsText,
+					language_hint: languageHint,
+				})
+			);
+			setJob((prev) => (prev?.name === name ? { ...prev, ...result } : prev));
+			return result;
+		},
+		[splitLyricsWithLlm]
+	);
+	const handleExplainQualityWithLlm = useCallback(
+		async (name) => {
+			const result = unwrapFrappeMessage(await explainQualityWithLlm({ job_name: name }));
+			setJob((prev) => (prev?.name === name ? { ...prev, ...result } : prev));
+			return result;
+		},
+		[explainQualityWithLlm]
+	);
 	const handleDownloadTranscript = async (name, assetType) => {
 		setError(null);
 		try {
@@ -906,6 +991,11 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 							onResetTranscript={handleResetTranscript}
 							onRegenerateSubtitles={handleRegenerateSubtitles}
 							onDownloadManualTranscript={handleDownloadManualTranscript}
+							onStartLlmSuggestion={handleStartLlmSuggestion}
+							onAcceptLlmSuggestion={handleAcceptLlmSuggestion}
+							onSuggestKeyterms={handleSuggestKeyterms}
+							onSplitLyricsWithLlm={handleSplitLyricsWithLlm}
+							onExplainQualityWithLlm={handleExplainQualityWithLlm}
 							onJobUpdated={fetchJobDetail}
 							onStart={handleStart}
 							jobKaraokeStyle={jobKaraokeStyle}
