@@ -63,6 +63,22 @@
   "karaoke_status",
   "karaoke_use_manual_transcript",
   "karaoke_source_mode",
+  "karaoke_audio_mode",
+  "karaoke_style_override_enabled",
+  "karaoke_style_preset_override",
+  "karaoke_visible_lines_override",
+  "karaoke_center_y_percent_override",
+  "karaoke_line_gap_override",
+  "karaoke_font_size_override",
+  "karaoke_primary_color_override",
+  "karaoke_highlight_color_override",
+  "karaoke_previous_line_color_override",
+  "karaoke_next_line_color_override",
+  "karaoke_outline_color_override",
+  "karaoke_shadow_override",
+  "karaoke_outline_override",
+  "karaoke_effective_style_json",
+  "karaoke_style_source",
   "karaoke_template",
   "karaoke_ass_file",
   "karaoke_video_file",
@@ -443,6 +459,93 @@
    "fieldtype": "Select",
    "label": "Karaoke Source Mode",
    "options": "Auto\nOriginal Whisper\nManual Corrected"
+  },
+  {
+   "default": "Auto",
+   "fieldname": "karaoke_audio_mode",
+   "fieldtype": "Select",
+   "label": "Karaoke Audio Mode",
+   "options": "Auto\nInstrumental\nOriginal"
+  },
+  {
+   "default": "0",
+   "fieldname": "karaoke_style_override_enabled",
+   "fieldtype": "Check",
+   "label": "Karaoke Style Override Enabled"
+  },
+  {
+   "fieldname": "karaoke_style_preset_override",
+   "fieldtype": "Select",
+   "label": "Karaoke Style Preset Override",
+   "options": "default_1080p\nmobile_1080x1920\nclassic_center_3line"
+  },
+  {
+   "fieldname": "karaoke_visible_lines_override",
+   "fieldtype": "Int",
+   "label": "Karaoke Visible Lines Override"
+  },
+  {
+   "fieldname": "karaoke_center_y_percent_override",
+   "fieldtype": "Float",
+   "label": "Karaoke Center Y Percent Override"
+  },
+  {
+   "fieldname": "karaoke_line_gap_override",
+   "fieldtype": "Int",
+   "label": "Karaoke Line Gap Override"
+  },
+  {
+   "fieldname": "karaoke_font_size_override",
+   "fieldtype": "Int",
+   "label": "Karaoke Font Size Override"
+  },
+  {
+   "fieldname": "karaoke_primary_color_override",
+   "fieldtype": "Data",
+   "label": "Karaoke Primary Color Override"
+  },
+  {
+   "fieldname": "karaoke_highlight_color_override",
+   "fieldtype": "Data",
+   "label": "Karaoke Highlight Color Override"
+  },
+  {
+   "fieldname": "karaoke_previous_line_color_override",
+   "fieldtype": "Data",
+   "label": "Karaoke Previous Line Color Override"
+  },
+  {
+   "fieldname": "karaoke_next_line_color_override",
+   "fieldtype": "Data",
+   "label": "Karaoke Next Line Color Override"
+  },
+  {
+   "fieldname": "karaoke_outline_color_override",
+   "fieldtype": "Data",
+   "label": "Karaoke Outline Color Override"
+  },
+  {
+   "fieldname": "karaoke_shadow_override",
+   "fieldtype": "Float",
+   "label": "Karaoke Shadow Override"
+  },
+  {
+   "fieldname": "karaoke_outline_override",
+   "fieldtype": "Float",
+   "label": "Karaoke Outline Override"
+  },
+  {
+   "fieldname": "karaoke_effective_style_json",
+   "fieldtype": "Long Text",
+   "label": "Karaoke Effective Style JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "karaoke_style_source",
+   "fieldtype": "Select",
+   "label": "Karaoke Style Source",
+   "options": "Global Settings\nJob Override",
+   "read_only": 1
   },
   {
    "fieldname": "karaoke_ass_file",

@@ -52,6 +52,18 @@
   "karaoke_ass_enabled",
   "karaoke_video_render_enabled",
   "karaoke_style_preset",
+  "karaoke_visible_lines",
+  "karaoke_center_y_percent",
+  "karaoke_line_gap",
+  "karaoke_font_name",
+  "karaoke_font_size",
+  "karaoke_primary_color",
+  "karaoke_highlight_color",
+  "karaoke_previous_line_color",
+  "karaoke_next_line_color",
+  "karaoke_outline_color",
+  "karaoke_shadow",
+  "karaoke_outline",
   "karaoke_max_words_per_line",
   "karaoke_video_width",
   "karaoke_video_height",
@@ -359,8 +371,85 @@
   {
    "default": "default_1080p",
    "fieldname": "karaoke_style_preset",
+   "fieldtype": "Select",
+   "label": "Karaoke Style Preset",
+   "options": "default_1080p\ndefault_720p\nmobile_1080x1920\nclassic_center_3line"
+  },
+  {
+   "default": "3",
+   "fieldname": "karaoke_visible_lines",
+   "fieldtype": "Int",
+   "label": "Karaoke Visible Lines",
+   "non_negative": 1
+  },
+  {
+   "default": "50",
+   "fieldname": "karaoke_center_y_percent",
+   "fieldtype": "Float",
+   "label": "Karaoke Center Y Percent"
+  },
+  {
+   "default": "90",
+   "fieldname": "karaoke_line_gap",
+   "fieldtype": "Int",
+   "label": "Karaoke Line Gap",
+   "non_negative": 1
+  },
+  {
+   "default": "Helvetica",
+   "fieldname": "karaoke_font_name",
+   "fieldtype": "Select",
+   "label": "Karaoke Font Name",
+   "options": "Helvetica\nArial Narrow\nBebas Neue"
+  },
+  {
+   "default": "64",
+   "fieldname": "karaoke_font_size",
+   "fieldtype": "Int",
+   "label": "Karaoke Font Size",
+   "non_negative": 1
+  },
+  {
+   "default": "#FFFFFF",
+   "fieldname": "karaoke_primary_color",
    "fieldtype": "Data",
-   "label": "Karaoke Style Preset"
+   "label": "Karaoke Primary Color"
+  },
+  {
+   "default": "#3366FF",
+   "fieldname": "karaoke_highlight_color",
+   "fieldtype": "Data",
+   "label": "Karaoke Highlight Color"
+  },
+  {
+   "default": "#3366FF",
+   "fieldname": "karaoke_previous_line_color",
+   "fieldtype": "Data",
+   "label": "Karaoke Previous Line Color"
+  },
+  {
+   "default": "#FFFFFF",
+   "fieldname": "karaoke_next_line_color",
+   "fieldtype": "Data",
+   "label": "Karaoke Next Line Color"
+  },
+  {
+   "default": "#000000",
+   "fieldname": "karaoke_outline_color",
+   "fieldtype": "Data",
+   "label": "Karaoke Outline Color"
+  },
+  {
+   "default": "1",
+   "fieldname": "karaoke_shadow",
+   "fieldtype": "Float",
+   "label": "Karaoke Shadow"
+  },
+  {
+   "default": "3",
+   "fieldname": "karaoke_outline",
+   "fieldtype": "Float",
+   "label": "Karaoke Outline"
   },
   {
    "default": "5",

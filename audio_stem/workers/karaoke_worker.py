@@ -27,7 +27,7 @@ def process_karaoke_render(name: str, template: str | None = None):
 	settings = get_settings()
 	previous_video = job.karaoke_video_file
 	previous_ass = job.karaoke_ass_file
-	style_preset = resolve_karaoke_style_preset(template)
+	style_preset = resolve_karaoke_style_preset(template, job=job)
 
 	if should_stop_for_cancellation(job):
 		job.karaoke_status = "Cancelled"

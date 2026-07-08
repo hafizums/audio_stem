@@ -368,6 +368,9 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 	const [cancelling, setCancelling] = useState(false);
 	const [transcribing, setTranscribing] = useState(false);
 	const [karaokeRendering, setKaraokeRendering] = useState(false);
+	const [savingJobKaraokeStyle, setSavingJobKaraokeStyle] = useState(false);
+	const [savingSiteKaraokeStyle, setSavingSiteKaraokeStyle] = useState(false);
+	const [jobKaraokeStyle, setJobKaraokeStyle] = useState(null);
 	const [uploading, setUploading] = useState(false);
 	const [error, setError] = useState(null);
 	const pollRef = useRef(null);
@@ -432,6 +435,18 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 	const { call: clearKaraokeBackgroundVideo } = useFrappePostCall(
 		"audio_stem.api.separation.clear_karaoke_background_video"
 	);
+	const { call: updateKaraokeStyleSettings } = useFrappePostCall(
+		"audio_stem.api.separation.update_karaoke_style_settings"
+	);
+	const { call: getKaraokeStyleForJob } = useFrappePostCall(
+		"audio_stem.api.separation.get_karaoke_style_for_job"
+	);
+	const { call: updateKaraokeStyleForJob } = useFrappePostCall(
+		"audio_stem.api.separation.update_karaoke_style_for_job"
+	);
+	const { call: resetKaraokeStyleForJob } = useFrappePostCall(
+		"audio_stem.api.separation.reset_karaoke_style_for_job"
+	);
 
 	const displayCurrency = job?.display_currency || settings?.display_currency || "MYR";
 	const costPerSecond = settings?.cost_per_second_usd || 0;
@@ -458,10 +473,32 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 		}
 	}, []);
 
+	const fetchJobKaraokeStyle = useCallback(
+		async (name = jobName) => {
+			if (!name) {
+				setJobKaraokeStyle(null);
+				return;
+			}
+			try {
+				const style = unwrapFrappeMessage(await getKaraokeStyleForJob({ job_name: name }));
+				setJobKaraokeStyle(style);
+			} catch (err) {
+				setError(parseFrappeError(err) || err.message || "Failed to load karaoke style");
+			}
+		},
+		[getKaraokeStyleForJob, jobName]
+	);
+
 	const fetchJobDetail = useCallback(async () => {
 		if (!jobName) return;
 		const nextJob = unwrapFrappeMessage(await getJobDetail({ job_name: jobName }));
 		setJob(nextJob);
+		try {
+			const style = unwrapFrappeMessage(await getKaraokeStyleForJob({ job_name: jobName }));
+			setJobKaraokeStyle(style);
+		} catch (err) {
+			setError(parseFrappeError(err) || err.message || "Failed to load karaoke style");
+		}
 		const shouldPoll =
 			ACTIVE_STATUSES.includes(nextJob?.status) ||
 			nextJob?.is_transcription_active ||
@@ -476,7 +513,7 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 			refreshCredit();
 			refreshSettings();
 		}
-	}, [getJobDetail, jobName, refreshCredit, refreshRecent, refreshSettings, stopPolling]);
+	}, [getJobDetail, getKaraokeStyleForJob, jobName, refreshCredit, refreshRecent, refreshSettings, stopPolling]);
 
 	const startPolling = useCallback(() => {
 		stopPolling();
@@ -600,13 +637,20 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 		}
 	};
 
-	const handleKaraoke = async (name, karaokeSourceMode = "Auto") => {
+	const handleKaraoke = async (
+		name,
+		{ karaokeSourceMode = "Auto", karaokeAudioMode = "Auto" } = {}
+	) => {
 		if (karaokeRendering) return;
 		setKaraokeRendering(true);
 		setError(null);
 		try {
 			const result = unwrapFrappeMessage(
-				await startKaraokeRender({ job_name: name, karaoke_source_mode: karaokeSourceMode })
+				await startKaraokeRender({
+					job_name: name,
+					karaoke_source_mode: karaokeSourceMode,
+					karaoke_audio_mode: karaokeAudioMode,
+				})
 			);
 			setJobName(name);
 			setJob(result);
@@ -625,6 +669,52 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 			await fetchJobDetail();
 		} catch (err) {
 			setError(parseFrappeError(err) || err.message || "Failed to clear karaoke background video");
+		}
+	};
+
+	const handleSaveSiteKaraokeStyle = async (stylePayload) => {
+		setSavingSiteKaraokeStyle(true);
+		setError(null);
+		try {
+			await updateKaraokeStyleSettings(stylePayload);
+			await refreshSettings();
+			await fetchJobKaraokeStyle();
+		} catch (err) {
+			setError(parseFrappeError(err) || err.message || "Failed to save site karaoke style");
+		} finally {
+			setSavingSiteKaraokeStyle(false);
+		}
+	};
+
+	const handleSaveJobKaraokeStyle = async (stylePayload) => {
+		if (!jobName) return;
+		setSavingJobKaraokeStyle(true);
+		setError(null);
+		try {
+			const style = unwrapFrappeMessage(
+				await updateKaraokeStyleForJob({ job_name: jobName, ...stylePayload })
+			);
+			setJobKaraokeStyle(style);
+			await fetchJobDetail();
+		} catch (err) {
+			setError(parseFrappeError(err) || err.message || "Failed to save job karaoke style");
+		} finally {
+			setSavingJobKaraokeStyle(false);
+		}
+	};
+
+	const handleResetJobKaraokeStyle = async () => {
+		if (!jobName) return;
+		setSavingJobKaraokeStyle(true);
+		setError(null);
+		try {
+			const style = unwrapFrappeMessage(await resetKaraokeStyleForJob({ job_name: jobName }));
+			setJobKaraokeStyle(style);
+			await fetchJobDetail();
+		} catch (err) {
+			setError(parseFrappeError(err) || err.message || "Failed to reset job karaoke style");
+		} finally {
+			setSavingJobKaraokeStyle(false);
 		}
 	};
 
@@ -796,6 +886,12 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 							onDownloadManualTranscript={handleDownloadManualTranscript}
 							onJobUpdated={fetchJobDetail}
 							onStart={handleStart}
+							jobKaraokeStyle={jobKaraokeStyle}
+							onSaveJobKaraokeStyle={handleSaveJobKaraokeStyle}
+							onResetJobKaraokeStyle={handleResetJobKaraokeStyle}
+							onSaveSiteKaraokeStyle={handleSaveSiteKaraokeStyle}
+							savingJobKaraokeStyle={savingJobKaraokeStyle}
+							savingSiteKaraokeStyle={savingSiteKaraokeStyle}
 							starting={starting}
 							retrying={retrying}
 							zipping={zipping}

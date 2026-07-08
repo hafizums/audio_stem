@@ -26,13 +26,16 @@ from audio_stem.utils.karaoke_backgrounds import (
 )
 from audio_stem.utils.limits import get_settings
 
+KARAOKE_AUDIO_MODES = ("Auto", "Instrumental", "Original")
+
 STYLE_PRESET_FACTORIES = {
 	"default_1080p": "default_1080p",
 	"default_720p": "default_720p",
 	"mobile_1080x1920": "mobile_1080x1920",
+	"classic_center_3line": "classic_center_3line",
 	"hype": "mobile_1080x1920",
 	"minimalist": "default_1080p",
-	"classic": "default_1080p",
+	"classic": "classic_center_3line",
 	"vibrant": "default_1080p",
 	"default": "default_1080p",
 }
@@ -80,7 +83,11 @@ def get_karaoke_engine_version() -> str:
 		return ""
 
 
-def resolve_karaoke_style_preset(preset: str | None = None) -> str:
+def resolve_karaoke_style_preset(preset: str | None = None, job=None) -> str:
+	if job is not None:
+		from audio_stem.utils.karaoke_style_settings import resolve_effective_karaoke_style
+
+		return resolve_effective_karaoke_style(job)["effective"]["karaoke_style_preset"]
 	settings = get_settings()
 	preset = (preset or settings.karaoke_style_preset or "default_1080p").strip()
 	return preset or "default_1080p"
@@ -95,6 +102,33 @@ def get_karaoke_style(preset: str | None = None):
 	return factory()
 
 
+def get_karaoke_engine_style_args(job=None, preset: str | None = None) -> dict:
+	"""Return kwargs for KaraokeEngine.create_ass/render_video style configuration."""
+	from audio_stem.utils.karaoke_style_settings import (
+		build_classic_center_options_from_style,
+		resolve_effective_karaoke_style,
+	)
+
+	if job is not None:
+		effective = resolve_effective_karaoke_style(job)["effective"]
+		preset = effective["karaoke_style_preset"]
+	else:
+		preset = resolve_karaoke_style_preset(preset)
+		effective = None
+
+	if preset.strip().lower() == "classic_center_3line":
+		style = effective
+		if style is None:
+			from audio_stem.utils.karaoke_style_settings import karaoke_style_settings_payload
+
+			style = karaoke_style_settings_payload()
+		return {
+			"style": get_karaoke_style(preset),
+			"classic_center_options": build_classic_center_options_from_style(style),
+		}
+	return {"style": get_karaoke_style(preset)}
+
+
 def resolve_transcript_json_for_karaoke(job) -> str:
 	"""Return a filesystem path to karaoke-ready transcript JSON."""
 	from audio_stem.utils.transcript_corrections import load_karaoke_transcript_data
@@ -106,17 +140,36 @@ def resolve_transcript_json_for_karaoke(job) -> str:
 	return transcript_path
 
 
+def resolve_karaoke_use_instrumental(job, settings=None) -> bool:
+	"""Return True when karaoke video should use the instrumental track."""
+	settings = settings or get_settings()
+	mode = (getattr(job, "karaoke_audio_mode", None) or "Auto").strip()
+	if mode == "Instrumental":
+		return True
+	if mode == "Original":
+		return False
+	return bool(cint(settings.karaoke_include_instrumental_audio))
+
+
+def karaoke_audio_source_label(job, settings=None) -> str:
+	"""Human-readable label for the audio track used in karaoke video."""
+	return "Instrumental track" if resolve_karaoke_use_instrumental(job, settings) else "Original song"
+
+
 def resolve_karaoke_audio_path(job) -> str:
 	settings = get_settings()
-	use_instrumental = bool(cint(settings.karaoke_include_instrumental_audio))
+	use_instrumental = resolve_karaoke_use_instrumental(job, settings)
 	candidates = []
 	if use_instrumental:
 		if job.instrumental_file:
 			candidates.append(resolve_frappe_file_path(job.instrumental_file))
 		if job.instrumental_output_url:
 			candidates.append(job.instrumental_output_url)
-	if job.original_file:
-		candidates.append(resolve_frappe_file_path(job.original_file) or job.original_file)
+		if job.original_file:
+			candidates.append(resolve_frappe_file_path(job.original_file) or job.original_file)
+	else:
+		if job.original_file:
+			candidates.append(resolve_frappe_file_path(job.original_file) or job.original_file)
 	if job.vocal_file:
 		candidates.append(resolve_frappe_file_path(job.vocal_file))
 
@@ -303,6 +356,15 @@ def _read_file_bytes(path: str) -> bytes:
 		return handle.read()
 
 
+def _save_karaoke_style_tracking(job) -> None:
+	from audio_stem.utils.karaoke_style_settings import resolve_effective_karaoke_style
+
+	resolved = resolve_effective_karaoke_style(job)
+	job.karaoke_style_source = resolved["source"]
+	job.karaoke_effective_style_json = json.dumps(resolved["effective"], indent=2)
+	job.karaoke_template = resolved["effective"]["karaoke_style_preset"]
+
+
 def build_karaoke_ass_with_engine(job, *, style_preset: str | None = None) -> str:
 	if not is_karaoke_engine_available():
 		frappe.throw(
@@ -315,20 +377,20 @@ def build_karaoke_ass_with_engine(job, *, style_preset: str | None = None) -> st
 	settings = get_settings()
 	transcript_path = resolve_transcript_json_for_karaoke(job)
 	ass_path = tempfile.mktemp(suffix=".ass")
-	style = get_karaoke_style(style_preset)
 	width = cint(settings.karaoke_video_width) or 1080
 	height = cint(settings.karaoke_video_height) or 1920
 
 	engine = KaraokeEngine()
+	style_args = get_karaoke_engine_style_args(job=job, preset=style_preset)
 	try:
 		engine.create_ass(
 			transcript_path=transcript_path,
 			output_path=ass_path,
-			style=style,
 			segment_options=_segment_options_from_settings(),
 			play_res_x=width,
 			play_res_y=height,
 			title=f"Karaoke {job.name}",
+			**style_args,
 		)
 	finally:
 		try:
@@ -350,6 +412,7 @@ def build_karaoke_ass_with_engine(job, *, style_preset: str | None = None) -> st
 	job.karaoke_ass_file = file_url
 	job.karaoke_source_transcript_file = source_file_url
 	job.karaoke_engine_version = get_karaoke_engine_version()
+	_save_karaoke_style_tracking(job)
 
 	try:
 		os.unlink(ass_path)
@@ -376,7 +439,7 @@ def render_karaoke_video_with_engine(job, *, style_preset: str | None = None, in
 
 	settings = get_settings()
 	transcript_path = resolve_transcript_json_for_karaoke(job)
-	style = get_karaoke_style(style_preset)
+	style_args = get_karaoke_engine_style_args(job=job, preset=style_preset)
 	width = cint(settings.karaoke_video_width) or 1080
 	height = cint(settings.karaoke_video_height) or 1920
 
@@ -396,13 +459,13 @@ def render_karaoke_video_with_engine(job, *, style_preset: str | None = None, in
 			transcript_path=transcript_path,
 			output_path=output_path,
 			ass_output_path=ass_path,
-			style=style,
 			segment_options=_segment_options_from_settings(),
 			play_res_x=width,
 			play_res_y=height,
 			title=f"Karaoke {job.name}",
 			render_options=_render_options_from_settings(),
 			auto_probe_resolution=False,
+			**style_args,
 		)
 
 		file_url = _attach_private_binary_file(
@@ -420,6 +483,8 @@ def render_karaoke_video_with_engine(job, *, style_preset: str | None = None, in
 				content=_read_file_bytes(str(result.ass_path)),
 				fieldname="karaoke_ass_file",
 			)
+
+		_save_karaoke_style_tracking(job)
 
 		if created_temp_video and source_video_path:
 			job.karaoke_render_source_video_file = _attach_private_binary_file(

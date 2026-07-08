@@ -304,6 +304,15 @@ def _karaoke_rendered_transcript_source_label(job) -> str | None:
 		return None
 
 
+def _karaoke_audio_source_label(job) -> str:
+	from audio_stem.utils.karaoke_subtitles import karaoke_audio_source_label
+
+	try:
+		return karaoke_audio_source_label(job)
+	except Exception:
+		return "Instrumental track"
+
+
 def _can_edit_transcript(job) -> bool:
 	from audio_stem.utils.transcription_karaoke_controls import KARAOKE_ACTIVE_STATUSES, karaoke_queue_is_stale
 
@@ -450,6 +459,10 @@ def _transcription_karaoke_payload(job):
 		"manual_transcript_is_approved": (job.get("manual_transcript_status") or "Not Started") == "Approved",
 		"karaoke_use_manual_transcript": bool(cint(job.get("karaoke_use_manual_transcript"))),
 		"karaoke_source_mode": job.get("karaoke_source_mode") or "Auto",
+		"karaoke_audio_mode": job.get("karaoke_audio_mode") or "Auto",
+		"karaoke_audio_source_label": _karaoke_audio_source_label(job),
+		"karaoke_style_override_enabled": bool(cint(job.get("karaoke_style_override_enabled"))),
+		"karaoke_style_source": job.get("karaoke_style_source"),
 		"karaoke_transcript_source_label": _karaoke_transcript_source_label(job),
 		"karaoke_rendered_transcript_source_label": _karaoke_rendered_transcript_source_label(job),
 		"can_edit_transcript": _can_edit_transcript(job),
@@ -629,6 +642,7 @@ def get_job_detail(job_name: str):
 def get_page_settings():
 	_require_login()
 	from audio_stem.integrations.credit_management_client import get_audio_credit_type, is_credit_management_enabled
+	from audio_stem.utils.karaoke_style_settings import karaoke_style_settings_payload
 	from audio_stem.utils.daily_limits import get_daily_limit_status
 	from audio_stem.utils.pilot_access import get_pilot_access_status
 
@@ -649,6 +663,7 @@ def get_page_settings():
 		"karaoke_ass_enabled": bool(cint(get_settings().karaoke_ass_enabled)),
 		"karaoke_video_render_enabled": bool(cint(get_settings().karaoke_video_render_enabled)),
 		"karaoke_style_preset": get_settings().karaoke_style_preset or "default_1080p",
+		"karaoke_include_instrumental_audio": bool(cint(get_settings().karaoke_include_instrumental_audio)),
 		"has_default_karaoke_background_video": bool(get_settings().default_karaoke_background_video),
 		"subtitle_max_words_per_line": cint(get_settings().subtitle_max_words_per_line) or 5,
 		"subtitle_max_line_duration_seconds": flt(get_settings().subtitle_max_line_duration_seconds) or 4.0,
@@ -656,7 +671,101 @@ def get_page_settings():
 		"subtitle_snap_overlaps": bool(cint(get_settings().subtitle_snap_overlaps)),
 		"default_transcription_language": get_settings().default_transcription_language,
 		"transcription_max_file_size_mb": cint(get_settings().transcription_max_file_size_mb) or 25,
+		**karaoke_style_settings_payload(),
 	}
+
+
+@frappe.whitelist()
+def update_karaoke_style_settings(**kwargs):
+	"""Update karaoke subtitle style settings (System Manager only)."""
+	_require_login()
+	if not _is_system_manager():
+		frappe.throw(_("Only System Managers can update karaoke style settings."), frappe.PermissionError)
+
+	from audio_stem.utils.karaoke_style_settings import karaoke_style_settings_payload
+
+	settings = get_settings()
+	allowed_fields = set(karaoke_style_settings_payload().keys())
+	for fieldname, value in kwargs.items():
+		if fieldname not in allowed_fields:
+			continue
+		if value is None or value == "":
+			continue
+		settings.set(fieldname, value)
+	settings.save(ignore_permissions=True)
+	frappe.db.commit()
+	return karaoke_style_settings_payload(settings)
+
+
+@frappe.whitelist()
+def get_karaoke_style_for_job(job_name: str):
+	"""Return global, override, and effective karaoke style for a job."""
+	_require_login()
+	job = _get_job_for_user(job_name)
+	from audio_stem.utils.audit_log import log_audit
+	from audio_stem.utils.karaoke_style_settings import karaoke_style_for_job_payload
+
+	payload = karaoke_style_for_job_payload(job)
+	payload["can_edit_site_style"] = _is_system_manager()
+	payload["can_edit_job_style"] = True
+	log_audit(
+		"View Karaoke Style",
+		reference_doctype=job.doctype,
+		reference_name=job.name,
+		message="Karaoke style viewed.",
+	)
+	return payload
+
+
+@frappe.whitelist()
+def update_karaoke_style_for_job(job_name: str, **kwargs):
+	"""Update per-job karaoke style overrides for the current user's job."""
+	_require_login()
+	job = _get_job_for_user(job_name)
+	from audio_stem.utils.audit_log import log_audit
+	from audio_stem.utils.karaoke_style_settings import (
+		JOB_STYLE_UPDATE_FIELDS,
+		apply_job_style_update,
+		karaoke_style_for_job_payload,
+	)
+
+	style_payload = {key: kwargs[key] for key in JOB_STYLE_UPDATE_FIELDS if key in kwargs}
+	if not style_payload:
+		frappe.throw(_("No karaoke style fields were provided."), frappe.ValidationError)
+
+	apply_job_style_update(job, style_payload)
+	job.save(ignore_permissions=True)
+	frappe.db.commit()
+	log_audit(
+		"Update Karaoke Style",
+		reference_doctype=job.doctype,
+		reference_name=job.name,
+		message="Per-job karaoke style updated.",
+	)
+	return karaoke_style_for_job_payload(job)
+
+
+@frappe.whitelist()
+def reset_karaoke_style_for_job(job_name: str):
+	"""Clear per-job karaoke style overrides and revert to global settings."""
+	_require_login()
+	job = _get_job_for_user(job_name)
+	from audio_stem.utils.audit_log import log_audit
+	from audio_stem.utils.karaoke_style_settings import (
+		clear_job_style_overrides,
+		karaoke_style_for_job_payload,
+	)
+
+	clear_job_style_overrides(job)
+	job.save(ignore_permissions=True)
+	frappe.db.commit()
+	log_audit(
+		"Reset Karaoke Style",
+		reference_doctype=job.doctype,
+		reference_name=job.name,
+		message="Per-job karaoke style reset to site default.",
+	)
+	return karaoke_style_for_job_payload(job)
 
 
 @frappe.whitelist()
@@ -1017,7 +1126,12 @@ def download_transcript_asset(job_name: str, asset_type: str):
 
 
 @frappe.whitelist()
-def start_karaoke_render(job_name: str, template: str | None = None, karaoke_source_mode: str | None = None):
+def start_karaoke_render(
+	job_name: str,
+	template: str | None = None,
+	karaoke_source_mode: str | None = None,
+	karaoke_audio_mode: str | None = None,
+):
 	_require_app_access()
 	job = _get_job_for_user(job_name)
 
@@ -1029,7 +1143,7 @@ def start_karaoke_render(job_name: str, template: str | None = None, karaoke_sou
 		is_karaoke_enabled,
 		karaoke_queue_is_stale,
 	)
-	from audio_stem.utils.karaoke_subtitles import resolve_karaoke_style_preset
+	from audio_stem.utils.karaoke_subtitles import KARAOKE_AUDIO_MODES, resolve_karaoke_style_preset
 	from audio_stem.utils.transcript_corrections import KARAOKE_SOURCE_MODES
 
 	if not is_karaoke_enabled():
@@ -1050,6 +1164,13 @@ def start_karaoke_render(job_name: str, template: str | None = None, karaoke_sou
 		job.karaoke_source_mode = mode
 		job.save(ignore_permissions=True)
 
+	if karaoke_audio_mode:
+		audio_mode = karaoke_audio_mode.strip()
+		if audio_mode not in KARAOKE_AUDIO_MODES:
+			frappe.throw(_("Invalid karaoke audio mode."), frappe.ValidationError)
+		job.karaoke_audio_mode = audio_mode
+		job.save(ignore_permissions=True)
+
 	if job.karaoke_source_mode == "Manual Corrected" and not job.manual_transcript_json_file:
 		frappe.throw(_("Manual corrected transcript is required for this karaoke source mode."), frappe.ValidationError)
 
@@ -1060,7 +1181,11 @@ def start_karaoke_render(job_name: str, template: str | None = None, karaoke_sou
 		reference_doctype=job.doctype,
 		reference_name=job.name,
 		message=f"Karaoke subtitle generation queued with style {style_preset}.",
-		metadata={"style_preset": style_preset, "karaoke_source_mode": job.karaoke_source_mode or "Auto"},
+		metadata={
+			"style_preset": style_preset,
+			"karaoke_source_mode": job.karaoke_source_mode or "Auto",
+			"karaoke_audio_mode": job.karaoke_audio_mode or "Auto",
+		},
 	)
 	job.reload()
 	return {**_job_detail_payload(job), "already_active": False}

@@ -3,6 +3,10 @@
 
 from frappe.model.document import Document
 
+from audio_stem.utils.karaoke_style_settings import validate_karaoke_style_settings
+
 
 class AudioSeparationSettings(Document):
-	pass
+	def validate(self):
+		validate_karaoke_style_settings(self)
+

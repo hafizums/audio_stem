@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import TranscriptEditor from "./TranscriptEditor";
+import KaraokeStyleCard from "./KaraokeStyleCard";
 import WorkflowTabs, { useWorkflowTab, getRecommendedNextAction } from "./components/WorkflowTabs";
 import {
 	ACTIVE_STATUSES,
@@ -315,16 +316,33 @@ function EditLyricsTab({
 function KaraokeTab({
 	job,
 	settings,
+	jobKaraokeStyle,
 	karaokeRendering,
 	onKaraoke,
 	onUploadKaraokeBackground,
 	onClearKaraokeBackground,
+	onSaveJobKaraokeStyle,
+	onResetJobKaraokeStyle,
+	onSaveSiteKaraokeStyle,
+	savingJobKaraokeStyle,
+	savingSiteKaraokeStyle,
 }) {
 	const [karaokeSourceMode, setKaraokeSourceMode] = useState(job.karaoke_source_mode || "Auto");
+	const [karaokeAudioMode, setKaraokeAudioMode] = useState(job.karaoke_audio_mode || "Auto");
 
 	useEffect(() => {
 		setKaraokeSourceMode(job.karaoke_source_mode || "Auto");
-	}, [job.karaoke_source_mode, job.name]);
+		setKaraokeAudioMode(job.karaoke_audio_mode || "Auto");
+	}, [job.karaoke_source_mode, job.karaoke_audio_mode, job.name]);
+
+	const selectedKaraokeAudioLabel =
+		karaokeAudioMode === "Original"
+			? "Original song"
+			: karaokeAudioMode === "Instrumental"
+				? "Instrumental track"
+				: settings?.karaoke_include_instrumental_audio === false
+					? "Original song"
+					: "Instrumental track";
 
 	const selectedKaraokeSourceLabel =
 		karaokeSourceMode === "Original Whisper"
@@ -382,6 +400,18 @@ function KaraokeTab({
 				</div>
 			)}
 
+			<KaraokeStyleCard
+				jobStyle={jobKaraokeStyle}
+				settings={settings}
+				disabled={karaokeRendering || job.is_karaoke_active}
+				onSaveJobStyle={onSaveJobKaraokeStyle}
+				onResetJobStyle={onResetJobKaraokeStyle}
+				onSaveSiteStyle={onSaveSiteKaraokeStyle}
+				savingJobStyle={savingJobKaraokeStyle}
+				savingSiteStyle={savingSiteKaraokeStyle}
+				canEditSiteStyle={!!settings?.is_system_manager}
+			/>
+
 			<Card title="Generate karaoke">
 				<div className="mb-3 flex flex-wrap items-center gap-2">
 					<StatusBadge status={job.karaoke_status || "Not Started"} />
@@ -399,6 +429,22 @@ function KaraokeTab({
 						<option value="Manual Corrected">Manual Corrected</option>
 					</select>
 				</label>
+				<label className="mt-3 block text-sm text-gray-700">
+					Video audio
+					<select
+						className="mt-1 w-full max-w-xs rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+						value={karaokeAudioMode}
+						onChange={(event) => setKaraokeAudioMode(event.target.value)}
+						disabled={karaokeDisabled}
+					>
+						<option value="Auto">Auto (site default)</option>
+						<option value="Instrumental">Instrumental track</option>
+						<option value="Original">Original song</option>
+					</select>
+				</label>
+				<p className="mt-1 text-xs text-gray-500">
+					Next render audio: {selectedKaraokeAudioLabel}
+				</p>
 				{job.karaoke_rendered_transcript_source_label && (
 					<p className="mt-2 text-xs text-gray-500">
 						Last render used: {job.karaoke_rendered_transcript_source_label}
@@ -416,7 +462,12 @@ function KaraokeTab({
 				<div className="mt-3">
 					<PrimaryButton
 						disabled={karaokeDisabled}
-						onClick={() => onKaraoke(job.name, karaokeSourceMode)}
+						onClick={() =>
+							onKaraoke(job.name, {
+								karaokeSourceMode,
+								karaokeAudioMode,
+							})
+						}
 					>
 						{karaokeRendering || job.is_karaoke_active
 							? "Generating..."
@@ -683,6 +734,12 @@ export default function JobDetailPanel({
 	onDownloadManualTranscript,
 	onJobUpdated,
 	onStart,
+	jobKaraokeStyle,
+	onSaveJobKaraokeStyle,
+	onResetJobKaraokeStyle,
+	onSaveSiteKaraokeStyle,
+	savingJobKaraokeStyle,
+	savingSiteKaraokeStyle,
 	starting,
 	retrying,
 	zipping,
@@ -821,10 +878,16 @@ export default function JobDetailPanel({
 				{activeTab === "karaoke" && (
 					<KaraokeTab
 						{...tabProps}
+						jobKaraokeStyle={jobKaraokeStyle}
 						karaokeRendering={karaokeRendering}
 						onKaraoke={onKaraoke}
 						onUploadKaraokeBackground={onUploadKaraokeBackground}
 						onClearKaraokeBackground={onClearKaraokeBackground}
+						onSaveJobKaraokeStyle={onSaveJobKaraokeStyle}
+						onResetJobKaraokeStyle={onResetJobKaraokeStyle}
+						onSaveSiteKaraokeStyle={onSaveSiteKaraokeStyle}
+						savingJobKaraokeStyle={savingJobKaraokeStyle}
+						savingSiteKaraokeStyle={savingSiteKaraokeStyle}
 					/>
 				)}
 				{activeTab === "downloads" && (

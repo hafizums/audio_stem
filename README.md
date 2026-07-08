@@ -501,7 +501,7 @@ OpenAI Whisper transcription and karaoke subtitle generation (`karaoke_engine` +
 | `karaoke_enabled` | 0 | Enable karaoke subtitle pipeline |
 | `karaoke_ass_enabled` | 1 | Generate ASS karaoke subtitles |
 | `karaoke_video_render_enabled` | 0 | Burn ASS into MP4 with ffmpeg |
-| `karaoke_style_preset` | `default_1080p` | `default_1080p`, `default_720p`, `mobile_1080x1920` |
+| `karaoke_style_preset` | `default_1080p` | `default_1080p`, `default_720p`, `mobile_1080x1920`, `classic_center_3line` |
 | `karaoke_max_words_per_line` | 5 | Line breaking for ASS |
 | `karaoke_video_width` / `karaoke_video_height` | 1080 / 1920 | Background video dimensions |
 | `karaoke_background_color` | `#111111` | ffmpeg background color |
@@ -862,6 +862,117 @@ bench restart
 8. Confirm Recent Jobs is compact.
 9. Confirm Admin tools are collapsed and System Manager-only.
 10. Test a mobile-width viewport.
+
+## Milestone 8.5 — Per-job karaoke style overrides
+
+Milestone 8.5 lets each **Audio Separation Job** override karaoke subtitle style without changing global **Audio Separation Settings**.
+
+### Global style vs per-job style
+
+| Concept | Meaning |
+|---------|---------|
+| **Global style** | Site-wide defaults in Audio Separation Settings |
+| **Job override** | Optional per-job fields used when `karaoke_style_override_enabled = 1` |
+| **Effective style** | Final merged style used for ASS/MP4 generation |
+| **Style source** | `Global Settings` or `Job Override` — stored on the job after each successful ASS generation |
+
+### How to enable per-job override
+
+1. Open a job in `/audio-vocal-remover` → **Karaoke** tab → **Subtitle style**.
+2. Enable **Use custom style for this job**.
+3. Edit preset, colors, font size, line layout, outline, and shadow.
+4. Click **Save Job Style**.
+5. Click **Generate Karaoke** or **Regenerate Karaoke** to apply.
+
+### Rules
+
+- Existing jobs keep using global settings until override is enabled.
+- Empty override fields fall back to global values.
+- **Save Job Style** does not modify Audio Separation Settings.
+- Site-wide **Save Site Style** remains System Manager-only.
+- Regenerate ASS/MP4 after style changes; existing files are replaced only when a new generation succeeds.
+
+### API
+
+- `get_karaoke_style_for_job(job_name)`
+- `update_karaoke_style_for_job(job_name, **style_payload)`
+- `reset_karaoke_style_for_job(job_name)`
+
+### Manual test
+
+1. Set global style to `classic_center_3line`.
+2. Generate ASS/MP4 for one job.
+3. Enable custom style for that job; change font size and center Y.
+4. Save job style and regenerate ASS.
+5. Confirm only that job changed; global settings unchanged.
+6. Render MP4 and confirm override is visible.
+7. Reset job style to site default and regenerate.
+8. Confirm global style is used again.
+
+## Classic Center Karaoke Style
+
+The `classic_center_3line` preset is designed to match traditional karaoke videos: large centered lyrics with blue left-to-right highlighting on a dark background.
+
+### How it works
+
+- **karaoke_engine** owns ASS rendering and the `classic_center_3line` style preset.
+- **audio_stem** exposes site settings and a Karaoke tab UI, then passes style options into karaoke_engine.
+- audio_stem does not manually edit ASS text.
+
+### Visual behavior
+
+- Up to **3 stacked lines** centered on screen (previous / active / next).
+- **Inactive text:** white.
+- **Sung / highlighted text:** blue (`#3366FF` by default) via ASS `\kf` karaoke tags.
+- **Previous line:** blue (fully sung).
+- **Active line:** white with blue progressive highlight.
+- **Next line:** white.
+- Large Arial font, black outline, subtle shadow.
+- Works with generated color backgrounds or uploaded background videos.
+
+### Settings (Audio Separation Settings)
+
+| Field | Default | Notes |
+|-------|---------|-------|
+| `karaoke_style_preset` | `default_1080p` | Set to `classic_center_3line` |
+| `karaoke_visible_lines` | 3 | 1–5 |
+| `karaoke_center_y_percent` | 50 | 10–90 |
+| `karaoke_line_gap` | 90 | pixels between lines |
+| `karaoke_font_size` | 64 | 24–120 |
+| `karaoke_primary_color` | `#FFFFFF` | inactive text |
+| `karaoke_highlight_color` | `#3366FF` | karaoke fill |
+| `karaoke_previous_line_color` | `#3366FF` | previous line |
+| `karaoke_next_line_color` | `#FFFFFF` | next line |
+| `karaoke_outline_color` | `#000000` | outline |
+| `karaoke_shadow` | 1 | shadow depth |
+| `karaoke_outline` | 3 | outline width |
+
+### Frontend
+
+In `/audio-vocal-remover` → **Karaoke** tab → **Subtitle style** card:
+
+- Style preset dropdown (Default / Mobile / Classic Center Karaoke)
+- Font size, colors, center Y, line gap, visible lines
+- HTML/CSS preview of the 3-line classic look
+- System Managers can save site-wide style settings
+
+### Manual test
+
+1. Set `karaoke_style_preset = classic_center_3line` in Audio Separation Settings (or use the Karaoke tab UI as System Manager).
+2. Set background to black (`#000000`) or use a dark uploaded video background.
+3. Complete separation and transcription for a job.
+4. Generate karaoke ASS.
+5. Render MP4 (if video rendering is enabled).
+6. Confirm lyrics are centered, large, and readable.
+7. Confirm highlight is blue and progresses left-to-right.
+8. Confirm 2–3 lyric lines appear like classic karaoke.
+9. Adjust `karaoke_font_size` and `karaoke_center_y_percent`, regenerate, and confirm position changes.
+
+```bash
+cd /home/hafiz/frappe-bench/apps/karaoke_engine
+/home/hafiz/frappe-bench/env/bin/pip install pytest -q
+/home/hafiz/frappe-bench/env/bin/python -m pytest tests/test_classic_center_style.py tests/test_ass_style.py -q
+```
 
 #### License
 
