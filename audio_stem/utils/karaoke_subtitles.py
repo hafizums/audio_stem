@@ -331,14 +331,26 @@ def _attach_private_binary_file(job, *, file_name: str, content: bytes, fieldnam
 	return file_doc.file_url
 
 
-def _segment_options_from_settings():
+def _segment_options_from_settings(job=None):
 	from karaoke_engine import SegmentOptions
 
+	from audio_stem.utils.karaoke_style_settings import (
+		karaoke_style_settings_payload,
+		resolve_effective_karaoke_style,
+	)
+
 	settings = get_settings()
+	style = (
+		resolve_effective_karaoke_style(job)["effective"]
+		if job is not None
+		else karaoke_style_settings_payload(settings)
+	)
 	return SegmentOptions(
 		max_words_per_line=cint(settings.subtitle_max_words_per_line)
 		or cint(settings.karaoke_max_words_per_line)
-		or 5
+		or 5,
+		karaoke_timing_granularity=style.get("karaoke_timing_granularity") or "word",
+		karaoke_syllable_mode=style.get("karaoke_syllable_mode") or "auto",
 	)
 
 
@@ -388,7 +400,7 @@ def build_karaoke_ass_with_engine(job, *, style_preset: str | None = None) -> st
 		engine.create_ass(
 			transcript_path=transcript_path,
 			output_path=ass_path,
-			segment_options=_segment_options_from_settings(),
+			segment_options=_segment_options_from_settings(job),
 			play_res_x=width,
 			play_res_y=height,
 			title=f"Karaoke {job.name}",
@@ -462,7 +474,7 @@ def render_karaoke_video_with_engine(job, *, style_preset: str | None = None, in
 			transcript_path=transcript_path,
 			output_path=output_path,
 			ass_output_path=ass_path,
-			segment_options=_segment_options_from_settings(),
+			segment_options=_segment_options_from_settings(job),
 			play_res_x=width,
 			play_res_y=height,
 			title=f"Karaoke {job.name}",

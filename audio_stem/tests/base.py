@@ -122,6 +122,8 @@ DEFAULT_AUDIO_SEPARATION_TEST_SETTINGS = {
 	"karaoke_outline_color": "#000000",
 	"karaoke_shadow": 1.0,
 	"karaoke_outline": 3.0,
+	"karaoke_timing_granularity": "word",
+	"karaoke_syllable_mode": "auto",
 	"karaoke_max_words_per_line": 5,
 	"karaoke_video_width": 1080,
 	"karaoke_video_height": 1920,

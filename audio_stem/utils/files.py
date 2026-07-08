@@ -35,3 +35,12 @@ def resolve_frappe_file_path(file_url: str | None) -> str | None:
 		return path
 
 	return None
+
+
+def is_file_url_accessible(file_url: str | None) -> bool:
+	"""Return True when a Frappe file URL resolves to an existing local file."""
+	if not file_url:
+		return False
+	if is_external_file_url(file_url):
+		return True
+	return bool(resolve_frappe_file_path(file_url))

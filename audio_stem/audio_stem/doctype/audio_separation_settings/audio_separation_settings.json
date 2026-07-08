@@ -108,6 +108,8 @@
   "karaoke_outline_color",
   "karaoke_shadow",
   "karaoke_outline",
+  "karaoke_timing_granularity",
+  "karaoke_syllable_mode",
   "karaoke_max_words_per_line",
   "karaoke_video_width",
   "karaoke_video_height",
@@ -764,6 +766,20 @@
    "fieldname": "karaoke_outline",
    "fieldtype": "Float",
    "label": "Karaoke Outline"
+  },
+  {
+   "default": "word",
+   "fieldname": "karaoke_timing_granularity",
+   "fieldtype": "Select",
+   "label": "Karaoke Timing Granularity",
+   "options": "word\nsyllable\ncharacter"
+  },
+  {
+   "default": "auto",
+   "fieldname": "karaoke_syllable_mode",
+   "fieldtype": "Select",
+   "label": "Karaoke Syllable Mode",
+   "options": "auto\nsimple_vowel\nhyphen"
   },
   {
    "default": "5",

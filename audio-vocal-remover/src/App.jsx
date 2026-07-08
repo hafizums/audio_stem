@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	FrappeProvider,
 	useFrappeAuth,
@@ -215,6 +215,37 @@ function DailyUsageCard({ dailyUsage, displayCurrency }) {
 	);
 }
 
+function getRecentJobStep(row) {
+	if (row.transcription_status === "Completed") {
+		return row.karaoke_status === "Completed" ? "Karaoke done" : "Karaoke";
+	}
+	if (row.transcription_status && row.transcription_status !== "Not Started") {
+		return "Transcribe";
+	}
+	if (row.status === "Completed") {
+		return "Transcribe";
+	}
+	return "Separate";
+}
+
+function matchesRecentJobSearch(row, query) {
+	if (!query) return true;
+	const haystack = [
+		row.original_filename,
+		row.name,
+		row.status,
+		row.transcription_status,
+		row.karaoke_status,
+		row.credit_status,
+		row.error_summary,
+		getRecentJobStep(row),
+	]
+		.filter(Boolean)
+		.join(" ")
+		.toLowerCase();
+	return haystack.includes(query);
+}
+
 function RecentJobsTable({
 	recentJobs,
 	jobName,
@@ -227,18 +258,66 @@ function RecentJobsTable({
 	zipping,
 	settings,
 }) {
+	const [searchQuery, setSearchQuery] = useState("");
+	const normalizedQuery = searchQuery.trim().toLowerCase();
+
+	const filteredJobs = useMemo(
+		() => recentJobs.filter((row) => matchesRecentJobSearch(row, normalizedQuery)),
+		[recentJobs, normalizedQuery]
+	);
+
 	if (!recentJobs?.length) {
 		return (
 			<div className="rounded-xl border border-dashed border-gray-300 bg-white px-4 py-10 text-center">
-				<p className="text-sm font-medium text-gray-700">No jobs yet</p>
+				<p className="text-sm font-medium text-gray-700">No completed jobs yet</p>
 				<p className="mt-1 text-sm text-gray-500">
-					Upload your first audio file to create a separation job.
+					Finish a separation job to see it listed here.
 				</p>
 			</div>
 		);
 	}
+
 	return (
-		<div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+		<div className="space-y-3">
+			<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+				<label className="relative block min-w-0 flex-1 sm:max-w-md">
+					<span className="sr-only">Search recent jobs</span>
+					<input
+						type="search"
+						value={searchQuery}
+						onChange={(event) => setSearchQuery(event.target.value)}
+						placeholder="Search by filename, job ID, or status…"
+						className="w-full rounded-lg border border-gray-300 bg-white py-2 pl-3 pr-9 text-sm text-gray-900 placeholder:text-gray-400 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-100"
+					/>
+					{searchQuery && (
+						<button
+							type="button"
+							onClick={() => setSearchQuery("")}
+							className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+							aria-label="Clear search"
+						>
+							Clear
+						</button>
+					)}
+				</label>
+				{normalizedQuery ? (
+					<p className="text-xs text-gray-500 sm:shrink-0">
+						Showing {filteredJobs.length} of {recentJobs.length}
+					</p>
+				) : (
+					<p className="text-xs text-gray-500 sm:shrink-0">{recentJobs.length} completed</p>
+				)}
+			</div>
+
+			{filteredJobs.length === 0 ? (
+				<div className="rounded-xl border border-dashed border-gray-300 bg-white px-4 py-10 text-center">
+					<p className="text-sm font-medium text-gray-700">No matching jobs</p>
+					<p className="mt-1 text-sm text-gray-500">
+						Try a different filename, job ID, or status.
+					</p>
+				</div>
+			) : (
+		<div className="max-h-[32rem] overflow-x-auto overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-sm">
 			<table className="min-w-full text-sm">
 				<thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
 					<tr>
@@ -251,16 +330,8 @@ function RecentJobsTable({
 					</tr>
 				</thead>
 				<tbody className="divide-y divide-gray-100">
-					{recentJobs.map((row) => {
-						const step = row.transcription_status === "Completed"
-							? row.karaoke_status === "Completed"
-								? "Karaoke done"
-								: "Karaoke"
-							: row.transcription_status && row.transcription_status !== "Not Started"
-								? "Transcribe"
-								: row.status === "Completed"
-									? "Transcribe"
-									: "Separate";
+					{filteredJobs.map((row) => {
+						const step = getRecentJobStep(row);
 						return (
 							<tr
 								key={row.name}
@@ -329,6 +400,8 @@ function RecentJobsTable({
 				</tbody>
 			</table>
 		</div>
+			)}
+		</div>
 	);
 }
 
@@ -383,7 +456,7 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 	);
 	const { data: recentJobsResponse, mutate: refreshRecent } = useFrappeGetCall(
 		"audio_stem.api.separation.get_recent_jobs",
-		{ limit: 10 }
+		{ limit: 0 }
 	);
 	const settings = unwrapFrappeMessage(settingsResponse) || initialSettings;
 	const creditBalance = unwrapFrappeMessage(creditBalanceResponse);
@@ -1032,7 +1105,7 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 				</div>
 
 				<section className="space-y-3">
-					<h2 className="text-base font-semibold text-gray-900">Recent jobs</h2>
+					<h2 className="text-base font-semibold text-gray-900">Recent completed jobs</h2>
 					<RecentJobsTable
 						recentJobs={recentJobs}
 						jobName={jobName}

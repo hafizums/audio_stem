@@ -155,11 +155,19 @@ def _credit_blocked_reason(job, settings=None) -> str | None:
 
 
 def _has_vocal_output(job) -> bool:
-	return bool(job.vocal_output_url or job.vocal_file)
+	from audio_stem.utils.files import is_file_url_accessible
+
+	if job.vocal_output_url:
+		return True
+	return is_file_url_accessible(job.vocal_file)
 
 
 def _has_instrumental_output(job) -> bool:
-	return bool(job.instrumental_output_url or job.instrumental_file)
+	from audio_stem.utils.files import is_file_url_accessible
+
+	if job.instrumental_output_url:
+		return True
+	return is_file_url_accessible(job.instrumental_file)
 
 
 def _has_zip_output(job) -> bool:
@@ -270,6 +278,13 @@ def _job_detail_payload(job):
 	can_retry, retry_blocked_reason = _can_retry_job(job)
 	can_cancel, cancel_blocked_reason = _can_cancel_job(job)
 	credit_enabled = _credit_settings_flag_enabled()
+	from audio_stem.utils.files import is_file_url_accessible
+
+	original_accessible = is_file_url_accessible(job.original_file)
+	vocal_accessible = bool(job.vocal_output_url) or is_file_url_accessible(job.vocal_file)
+	instrumental_accessible = bool(job.instrumental_output_url) or is_file_url_accessible(
+		job.instrumental_file
+	)
 	from audio_stem.utils.credit_reconciliation import is_credit_reconciliation_needed
 
 	reconciliation_required = bool(
@@ -307,6 +322,9 @@ def _job_detail_payload(job):
 		"can_zip": _can_download_zip(job),
 		"has_vocal": _has_vocal_output(job),
 		"has_instrumental": _has_instrumental_output(job),
+		"original_file_accessible": original_accessible,
+		"vocal_accessible": vocal_accessible,
+		"instrumental_accessible": instrumental_accessible,
 		"is_active": job.status in ACTIVE_STATUSES,
 		"credit_management_enabled": credit_enabled,
 		"credit_status": job.credit_status,
@@ -939,12 +957,15 @@ def get_my_credit_balance():
 
 
 @frappe.whitelist()
-def get_recent_jobs(limit=10):
+def get_recent_jobs(limit=0):
+	"""Return completed jobs for the current user. limit=0 fetches all (max 500)."""
 	_require_app_access()
-	limit = min(cint(limit) or 10, 50)
+	parsed_limit = cint(limit)
+	if parsed_limit < 0:
+		parsed_limit = 0
 	credit_enabled = _credit_settings_flag_enabled()
 
-	filters = {"user": frappe.session.user}
+	filters = {"user": frappe.session.user, "status": "Completed"}
 	fields = [
 		"name",
 		"user",
@@ -961,18 +982,22 @@ def get_recent_jobs(limit=10):
 		"instrumental_file",
 		"zip_file",
 		"error_message",
+		"transcription_status",
+		"karaoke_status",
 	]
 	if credit_enabled:
 		fields.append("credit_status")
 
-	jobs = frappe.get_all(
-		"Audio Separation Job",
-		filters=filters,
-		fields=fields,
-		order_by="creation desc",
-		limit=limit,
-		ignore_permissions=True,
-	)
+	query_kwargs = {
+		"filters": filters,
+		"fields": fields,
+		"order_by": "completed_at desc, creation desc",
+		"ignore_permissions": True,
+	}
+	if parsed_limit > 0:
+		query_kwargs["limit"] = min(parsed_limit, 500)
+
+	jobs = frappe.get_all("Audio Separation Job", **query_kwargs)
 
 	rows = []
 	for row in jobs:
@@ -992,6 +1017,8 @@ def get_recent_jobs(limit=10):
 				"has_vocal": _has_vocal_output(job),
 				"has_instrumental": _has_instrumental_output(job),
 				"error_summary": job.error_message if job.status == "Failed" else None,
+				"transcription_status": job.get("transcription_status") or "Not Started",
+				"karaoke_status": job.get("karaoke_status") or "Not Started",
 				"can_retry": can_retry,
 				"can_cancel": can_cancel,
 				"can_zip": _can_download_zip(job),

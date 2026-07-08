@@ -97,6 +97,17 @@ export function unwrapFrappeMessage(data) {
 	return data;
 }
 
+/** Normalize Frappe/private file URLs for browser media elements. */
+export function resolveMediaUrl(src) {
+	if (!src) return null;
+	const value = String(src).trim();
+	if (!value) return null;
+	if (value.startsWith("http://") || value.startsWith("https://") || value.startsWith("/")) {
+		return value;
+	}
+	return `/private/files/${value.replace(/^\/?private\/files\//, "")}`;
+}
+
 export async function uploadAudioFile(file) {
 	const formData = new FormData();
 	formData.append("file", file);

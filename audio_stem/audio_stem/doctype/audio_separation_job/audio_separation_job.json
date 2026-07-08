@@ -104,6 +104,8 @@
   "karaoke_outline_color_override",
   "karaoke_shadow_override",
   "karaoke_outline_override",
+  "karaoke_timing_granularity_override",
+  "karaoke_syllable_mode_override",
   "karaoke_effective_style_json",
   "karaoke_style_source",
   "karaoke_template",
@@ -724,6 +726,18 @@
    "fieldname": "karaoke_outline_override",
    "fieldtype": "Float",
    "label": "Karaoke Outline Override"
+  },
+  {
+   "fieldname": "karaoke_timing_granularity_override",
+   "fieldtype": "Select",
+   "label": "Karaoke Timing Granularity Override",
+   "options": "word\nsyllable\ncharacter"
+  },
+  {
+   "fieldname": "karaoke_syllable_mode_override",
+   "fieldtype": "Select",
+   "label": "Karaoke Syllable Mode Override",
+   "options": "auto\nsimple_vowel\nhyphen"
   },
   {
    "fieldname": "karaoke_effective_style_json",

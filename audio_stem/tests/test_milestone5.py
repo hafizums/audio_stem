@@ -434,16 +434,28 @@ class TestAudioSeparationMilestone5(AudioStemTestCase):
 
 	def test_get_recent_jobs_includes_milestone5_fields(self):
 		job = self._create_job(
-			status="Failed",
+			status="Completed",
 			original_filename="song.mp3",
-			error_message="Safe failure",
 			provider_cost_usd=0.03,
+			completed_at=now_datetime(),
 		)
-		rows = get_recent_jobs(limit=5)
+		rows = get_recent_jobs(limit=50)
 		match = next(row for row in rows if row["name"] == job.name)
 		self.assertEqual(match["original_filename"], "song.mp3")
-		self.assertEqual(match["error_summary"], "Safe failure")
-		self.assertTrue(match["can_retry"])
+		self.assertIsNone(match["error_summary"])
+		self.assertFalse(match["can_retry"])
+
+	def test_get_recent_jobs_excludes_non_completed_jobs(self):
+		failed = self._create_job(status="Failed", original_filename="failed.mp3")
+		completed = self._create_job(
+			status="Completed",
+			original_filename="done.mp3",
+			completed_at=now_datetime(),
+		)
+		rows = get_recent_jobs(limit=50)
+		names = {row["name"] for row in rows}
+		self.assertIn(completed.name, names)
+		self.assertNotIn(failed.name, names)
 
 	def test_audio_stem_runtime_does_not_reference_credit_ledger_doctypes(self):
 		runtime_roots = [

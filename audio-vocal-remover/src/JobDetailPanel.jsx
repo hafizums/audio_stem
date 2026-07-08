@@ -14,22 +14,27 @@ import {
 	SecondaryButton,
 	StatusBadge,
 } from "./components/ui";
-import { formatCost, formatDateTime } from "./utils";
+import { formatCost, formatDateTime, resolveMediaUrl } from "./utils";
 
-function AudioPreview({ label, src }) {
-	if (!src) {
+function AudioPreview({ label, src, accessible = true }) {
+	const mediaUrl = resolveMediaUrl(src);
+	if (!mediaUrl || accessible === false) {
 		return (
 			<div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-3 text-sm text-gray-500">
 				<p className="font-medium text-gray-700">{label}</p>
-				<p className="mt-1 text-xs">Not available yet.</p>
+				<p className="mt-1 text-xs">
+					{src && accessible === false
+						? "File is no longer available on the server."
+						: "Not available yet."}
+				</p>
 			</div>
 		);
 	}
 	return (
 		<div className="rounded-lg border border-gray-200 bg-white px-3 py-3">
 			<p className="mb-2 text-sm font-medium text-gray-800">{label}</p>
-			<audio controls preload="none" src={src} className="w-full max-w-full" />
-			<a href={src} className="mt-2 inline-block text-sm text-blue-600 hover:underline" download>
+			<audio controls preload="none" src={mediaUrl} className="w-full max-w-full" />
+			<a href={mediaUrl} className="mt-2 inline-block text-sm text-blue-600 hover:underline" download>
 				Download
 			</a>
 		</div>
@@ -104,11 +109,20 @@ function SeparateTab({
 
 			<Card title="Tracks">
 				<div className="grid gap-3 sm:grid-cols-3">
-					<AudioPreview label="Original" src={job.original_file} />
-					<AudioPreview label="Vocal" src={job.vocal_output_url || job.vocal_file} />
+					<AudioPreview
+						label="Original"
+						src={job.original_file}
+						accessible={job.original_file_accessible}
+					/>
+					<AudioPreview
+						label="Vocal"
+						src={job.vocal_output_url || job.vocal_file}
+						accessible={job.vocal_accessible}
+					/>
 					<AudioPreview
 						label="Instrumental"
 						src={job.instrumental_output_url || job.instrumental_file}
+						accessible={job.instrumental_accessible}
 					/>
 				</div>
 			</Card>

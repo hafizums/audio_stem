@@ -19,8 +19,21 @@ const PREVIEW_FONT_FAMILIES = {
 	"Bebas Neue": '"Bebas Neue", Impact, sans-serif',
 };
 
+const TIMING_GRANULARITY_OPTIONS = [
+	{ value: "word", label: "Word" },
+	{ value: "syllable", label: "Syllable" },
+	{ value: "character", label: "Character" },
+];
+
+const TIMING_GRANULARITY_HELP = {
+	word: "Best for normal lyrics.",
+	syllable: 'Better for karaoke singing like "Lalalili Lili Lila".',
+	character: "Experimental for very hard timing.",
+};
+
 const STYLE_FIELDS = [
 	"karaoke_style_preset",
+	"karaoke_timing_granularity",
 	"karaoke_font_size",
 	"karaoke_visible_lines",
 	"karaoke_center_y_percent",
@@ -36,6 +49,7 @@ const STYLE_FIELDS = [
 
 const OVERRIDE_FIELD_MAP = {
 	karaoke_style_preset: "karaoke_style_preset_override",
+	karaoke_timing_granularity: "karaoke_timing_granularity_override",
 	karaoke_visible_lines: "karaoke_visible_lines_override",
 	karaoke_center_y_percent: "karaoke_center_y_percent_override",
 	karaoke_line_gap: "karaoke_line_gap_override",
@@ -78,6 +92,7 @@ function ClassicStylePreview({
 function styleFromEffective(effective = {}) {
 	return {
 		karaoke_style_preset: effective.karaoke_style_preset || "default_1080p",
+		karaoke_timing_granularity: effective.karaoke_timing_granularity || "word",
 		karaoke_font_name: effective.karaoke_font_name || "Helvetica",
 		karaoke_font_size: effective.karaoke_font_size ?? 64,
 		karaoke_highlight_color: effective.karaoke_highlight_color || "#3366FF",
@@ -193,6 +208,30 @@ export default function KaraokeStyleCard({
 			)}
 
 			<div className="grid gap-3 sm:grid-cols-2">
+				<label className="text-sm text-gray-700 sm:col-span-2">
+					Highlight timing
+					<select
+						className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+						value={activeState.karaoke_timing_granularity || "word"}
+						onChange={(e) => activeUpdate("karaoke_timing_granularity", e.target.value)}
+						disabled={overrideEnabled ? jobInputDisabled : inputDisabled}
+					>
+						{TIMING_GRANULARITY_OPTIONS.map((option) => (
+							<option key={option.value} value={option.value}>
+								{option.label}
+							</option>
+						))}
+					</select>
+					<span className="mt-1 block text-xs text-gray-500">
+						{TIMING_GRANULARITY_HELP[activeState.karaoke_timing_granularity || "word"]}
+					</span>
+					{jobStyle?.needs_regenerate_for_style &&
+						(jobStyle?.has_karaoke_ass || jobStyle?.has_karaoke_video) && (
+							<span className="mt-1 block text-xs text-amber-700">
+								Regenerate karaoke subtitle/video to apply timing changes.
+							</span>
+						)}
+				</label>
 				<label className="text-sm text-gray-700">
 					Style preset
 					<select

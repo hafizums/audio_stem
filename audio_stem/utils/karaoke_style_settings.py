@@ -19,6 +19,9 @@ JOB_OVERRIDE_STYLE_PRESETS = ("default_1080p", "mobile_1080x1920", CLASSIC_CENTE
 KARAOKE_FONT_NAMES = ("Helvetica", "Arial Narrow", "Bebas Neue")
 KARAOKE_STYLE_SOURCES = ("Global Settings", "Job Override")
 
+KARAOKE_TIMING_GRANULARITIES = ("word", "syllable", "character")
+KARAOKE_SYLLABLE_MODES = ("auto", "simple_vowel", "hyphen")
+
 STYLE_FIELD_KEYS = (
 	"karaoke_style_preset",
 	"karaoke_visible_lines",
@@ -32,6 +35,8 @@ STYLE_FIELD_KEYS = (
 	"karaoke_outline_color",
 	"karaoke_shadow",
 	"karaoke_outline",
+	"karaoke_timing_granularity",
+	"karaoke_syllable_mode",
 )
 
 GLOBAL_TO_OVERRIDE_FIELD = {
@@ -47,6 +52,8 @@ GLOBAL_TO_OVERRIDE_FIELD = {
 	"karaoke_outline_color": "karaoke_outline_color_override",
 	"karaoke_shadow": "karaoke_shadow_override",
 	"karaoke_outline": "karaoke_outline_override",
+	"karaoke_timing_granularity": "karaoke_timing_granularity_override",
+	"karaoke_syllable_mode": "karaoke_syllable_mode_override",
 }
 
 JOB_STYLE_UPDATE_FIELDS = ("karaoke_style_override_enabled", *GLOBAL_TO_OVERRIDE_FIELD.values())
@@ -87,6 +94,8 @@ def _style_values_from_settings_doc(doc) -> dict:
 		"karaoke_outline_color": doc.karaoke_outline_color,
 		"karaoke_shadow": doc.karaoke_shadow,
 		"karaoke_outline": doc.karaoke_outline,
+		"karaoke_timing_granularity": doc.karaoke_timing_granularity,
+		"karaoke_syllable_mode": doc.karaoke_syllable_mode,
 	}
 
 
@@ -133,6 +142,32 @@ def _validate_style_values(style: dict) -> None:
 	if flt(style.get("karaoke_outline")) < 0:
 		frappe.throw(_("Karaoke Outline must be >= 0."))
 
+	timing_granularity = _normalize_timing_granularity(
+		style.get("karaoke_timing_granularity")
+	)
+	if timing_granularity not in KARAOKE_TIMING_GRANULARITIES:
+		frappe.throw(
+			_("Karaoke Timing Granularity must be one of: {0}").format(
+				", ".join(KARAOKE_TIMING_GRANULARITIES)
+			)
+		)
+
+	syllable_mode = _normalize_syllable_mode(style.get("karaoke_syllable_mode"))
+	if syllable_mode not in KARAOKE_SYLLABLE_MODES:
+		frappe.throw(
+			_("Karaoke Syllable Mode must be one of: {0}").format(
+				", ".join(KARAOKE_SYLLABLE_MODES)
+			)
+		)
+
+
+def _normalize_timing_granularity(value: str | None) -> str:
+	return (value or "word").strip().lower()
+
+
+def _normalize_syllable_mode(value: str | None) -> str:
+	return (value or "auto").strip().lower()
+
 
 def _validate_hex_color(value: str | None, fieldname: str) -> None:
 	from karaoke_engine.ass.colors import is_valid_hex_color
@@ -162,6 +197,12 @@ def _normalize_style_dict(style: dict) -> dict:
 		"karaoke_outline_color": (style.get("karaoke_outline_color") or "#000000").strip(),
 		"karaoke_shadow": flt(style.get("karaoke_shadow")) or 1.0,
 		"karaoke_outline": flt(style.get("karaoke_outline")) or 3.0,
+		"karaoke_timing_granularity": _normalize_timing_granularity(
+			style.get("karaoke_timing_granularity")
+		),
+		"karaoke_syllable_mode": _normalize_syllable_mode(
+			style.get("karaoke_syllable_mode")
+		),
 	}
 
 
@@ -185,6 +226,8 @@ def job_style_override_payload(job) -> dict:
 		"karaoke_outline_color_override": job.karaoke_outline_color_override,
 		"karaoke_shadow_override": job.karaoke_shadow_override,
 		"karaoke_outline_override": job.karaoke_outline_override,
+		"karaoke_timing_granularity_override": job.karaoke_timing_granularity_override,
+		"karaoke_syllable_mode_override": job.karaoke_syllable_mode_override,
 	}
 
 

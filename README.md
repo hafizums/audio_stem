@@ -1111,6 +1111,23 @@ In `/audio-vocal-remover` → **Karaoke** tab → **Subtitle style** card:
 8. Confirm 2–3 lyric lines appear like classic karaoke.
 9. Adjust `karaoke_font_size` and `karaoke_center_y_percent`, regenerate, and confirm position changes.
 
+## Karaoke highlight timing
+
+Word-level `\kf` timing works well for normal spoken lyrics, but sung syllables like **“LALALILI LILI LILA LILA”** can feel chunky or slightly off-sync because one timing unit covers the whole word.
+
+| Setting | Default | Options |
+|---------|---------|---------|
+| `karaoke_timing_granularity` | `word` | `word`, `syllable`, `character` |
+| `karaoke_syllable_mode` | `auto` | `auto`, `simple_vowel`, `hyphen` |
+
+**Word mode** — best for normal lyrics. One highlight unit per transcript word (existing behavior).
+
+**Syllable mode** — recommended for classic karaoke, nursery songs, stretched vowels, and phonetic/local-language singing. Long words like `LALALILI` are split into smaller highlight units (e.g. `LA LA LI LI`) with the original word duration distributed across sub-units.
+
+**Character mode** — experimental for very difficult timing; one highlight unit per character.
+
+Per-job overrides are available via `karaoke_timing_granularity_override` and `karaoke_syllable_mode_override` when **Use custom style for this job** is enabled. After changing timing, regenerate karaoke ASS/MP4 to apply.
+
 ```bash
 cd /home/hafiz/frappe-bench/apps/karaoke_engine
 /home/hafiz/frappe-bench/env/bin/pip install pytest -q

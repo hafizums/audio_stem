@@ -173,7 +173,12 @@ class TestAudioSeparationPageAPI(AudioStemTestCase):
 		create_job_from_file(file_b)
 
 		frappe.set_user(self.user_a)
-		recent = get_recent_jobs(limit=20)
+		frappe.db.set_value(
+			"Audio Separation Job",
+			job_a,
+			{"status": "Completed", "completed_at": frappe.utils.now_datetime()},
+		)
+		recent = get_recent_jobs(limit=50)
 		names = {row["name"] for row in recent}
 		self.assertIn(job_a, names)
 		self.assertTrue(all(row.get("name") for row in recent))
