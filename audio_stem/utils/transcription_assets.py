@@ -10,7 +10,12 @@ import requests
 from frappe import _
 from frappe.utils import cint, flt
 
-from audio_stem.utils.ffmpeg_media import get_file_size_mb, transcode_audio_mono_mp3
+from audio_stem.utils.ffmpeg_media import (
+	get_file_size_mb,
+	is_ffmpeg_available,
+	preprocess_audio_for_transcription,
+	transcode_audio_mono_mp3,
+)
 from audio_stem.utils.files import is_external_file_url, resolve_frappe_file_path
 from audio_stem.utils.limits import get_settings
 
@@ -60,9 +65,46 @@ def resolve_transcription_source_path(job, source: str) -> str:
 def prepare_audio_for_whisper(local_audio_path: str) -> tuple[str, bool]:
 	settings = get_settings()
 	max_mb = cint(settings.transcription_max_file_size_mb) or 25
-	if get_file_size_mb(local_audio_path) <= max_mb:
+	size_mb = get_file_size_mb(local_audio_path)
+	preprocess_enabled = bool(cint(settings.transcription_audio_preprocess_enabled))
+	needs_transcode = size_mb > max_mb
+
+	if not preprocess_enabled and not needs_transcode:
 		return local_audio_path, False
-	return transcode_audio_mono_mp3(local_audio_path), True
+
+	if not is_ffmpeg_available():
+		if needs_transcode:
+			frappe.log_error(
+				title="Transcription preprocess unavailable",
+				message=(
+					f"ffmpeg is required to compress audio over {max_mb} MB for Whisper, "
+					f"but it was not found on PATH. Using original file ({size_mb:.1f} MB)."
+				),
+			)
+		return local_audio_path, False
+
+	sample_rate = cint(settings.transcription_preprocess_sample_rate) or 16000
+	channels = cint(settings.transcription_preprocess_channels) or 1
+	bitrate = (settings.transcription_preprocess_bitrate or "64k").strip() or "64k"
+
+	try:
+		if preprocess_enabled:
+			output_path = preprocess_audio_for_transcription(
+				local_audio_path,
+				sample_rate=sample_rate,
+				channels=channels,
+				bitrate=bitrate,
+				normalize_volume=True,
+			)
+			return output_path, True
+
+		return transcode_audio_mono_mp3(local_audio_path, bitrate=bitrate), True
+	except Exception:
+		frappe.log_error(
+			title="Transcription preprocess failed",
+			message=frappe.get_traceback(),
+		)
+		return local_audio_path, False
 
 
 def _attach_private_file(job, *, file_name: str, content: bytes | str, fieldname: str | None = None) -> str:

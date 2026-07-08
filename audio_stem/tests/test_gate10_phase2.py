@@ -307,7 +307,7 @@ class TestGate10Phase2PipelineCancellation(AudioStemTestCase):
 		job.vocal_output_url = "https://example.com/vocal.mp3"
 		job.save(ignore_permissions=True)
 
-		def _transcribe_and_cancel(_path, language=None):
+		def _transcribe_and_cancel(_path, language=None, prompt=None):
 			active = frappe.get_doc("Audio Separation Job", job.name)
 			active.cancellation_requested = 1
 			active.save(ignore_permissions=True)

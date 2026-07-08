@@ -159,13 +159,14 @@ class TestAudioSeparationMilestone8(AudioStemTestCase):
 			result = start_transcription(job.name)
 		self.assertEqual(result["transcription_status"], "Queued")
 
-	def test_completed_transcription_is_not_duplicated(self):
+	def test_completed_transcription_can_be_retried(self):
 		self._enable_openai()
 		job = self._create_completed_job()
 		job.transcription_status = "Completed"
 		job.save(ignore_permissions=True)
-		with self.assertRaises(frappe.ValidationError):
-			start_transcription(job.name)
+		with patch("audio_stem.api.separation.frappe.enqueue"):
+			result = start_transcription(job.name)
+		self.assertEqual(result["transcription_status"], "Queued")
 
 	@patch("openai.OpenAI")
 	def test_whisper_wrapper_uses_verbose_json_and_word_timestamps(self, openai_mock):

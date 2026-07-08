@@ -52,6 +52,12 @@
   "transcription_started_at",
   "transcription_completed_at",
   "transcription_cost_usd",
+  "transcription_word_count",
+  "transcription_segment_count",
+  "transcription_detected_language",
+  "transcription_first_segment_start",
+  "transcription_bad_timestamp_count",
+  "transcription_quality_warning",
   "section_break_manual_transcript",
   "manual_transcript_status",
   "manual_transcript_text",
@@ -385,6 +391,42 @@
    "fieldname": "transcription_cost_usd",
    "fieldtype": "Currency",
    "label": "Transcription Cost (USD)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcription_word_count",
+   "fieldtype": "Int",
+   "label": "Transcription Word Count",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcription_segment_count",
+   "fieldtype": "Int",
+   "label": "Transcription Segment Count",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcription_detected_language",
+   "fieldtype": "Data",
+   "label": "Transcription Detected Language",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcription_first_segment_start",
+   "fieldtype": "Float",
+   "label": "Transcription First Segment Start",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcription_bad_timestamp_count",
+   "fieldtype": "Int",
+   "label": "Transcription Bad Timestamp Count",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcription_quality_warning",
+   "fieldtype": "Small Text",
+   "label": "Transcription Quality Warning",
    "read_only": 1
   },
   {

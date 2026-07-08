@@ -452,6 +452,19 @@ def _transcription_karaoke_payload(job):
 		"transcription_started_at": job.get("transcription_started_at"),
 		"transcription_completed_at": job.get("transcription_completed_at"),
 		"transcription_cost_usd": flt(job.get("transcription_cost_usd")),
+		"transcription_word_count": cint(job.get("transcription_word_count")),
+		"transcription_segment_count": cint(job.get("transcription_segment_count")),
+		"transcription_detected_language": job.get("transcription_detected_language"),
+		"transcription_first_segment_start": flt(job.get("transcription_first_segment_start")),
+		"transcription_bad_timestamp_count": cint(job.get("transcription_bad_timestamp_count")),
+		"transcription_quality_warning": job.get("transcription_quality_warning"),
+		"transcription_quality_unreliable": bool(job.get("transcription_quality_warning")),
+		"transcription_suspiciously_short": bool(
+			job.get("transcription_quality_warning")
+			and cint(job.get("transcription_word_count")) > 0
+			and flt(job.duration_seconds) >= 60
+			and cint(job.get("transcription_word_count")) < max(12, int(flt(job.duration_seconds) / 60 * 8))
+		),
 		"karaoke_status": job.get("karaoke_status") or "Not Started",
 		"karaoke_style_preset": job.get("karaoke_template") or settings.karaoke_style_preset or "default_1080p",
 		"karaoke_ass_file": job.get("karaoke_ass_file"),
@@ -484,6 +497,11 @@ def _transcription_karaoke_payload(job):
 		"karaoke_style_preset_default": settings.karaoke_style_preset or "default_1080p",
 		"has_default_karaoke_background_video": bool(settings.get("default_karaoke_background_video")),
 		"default_transcription_language": settings.default_transcription_language,
+		"transcription_use_vocal_stem_by_default": bool(cint(settings.transcription_use_vocal_stem_by_default)),
+		"transcription_prompt_enabled": bool(cint(settings.transcription_prompt_enabled)),
+		"transcription_prompt_text": settings.transcription_prompt_text,
+		"transcription_audio_preprocess_enabled": bool(cint(settings.transcription_audio_preprocess_enabled)),
+		"transcription_chunking_enabled": bool(cint(settings.transcription_chunking_enabled)),
 		"manual_transcript_status": job.get("manual_transcript_status") or "Not Started",
 		"manual_transcript_text": job.get("manual_transcript_text"),
 		"manual_transcript_json_file": job.get("manual_transcript_json_file"),
@@ -710,6 +728,11 @@ def get_page_settings():
 		"subtitle_snap_overlaps": bool(cint(get_settings().subtitle_snap_overlaps)),
 		"default_transcription_language": get_settings().default_transcription_language,
 		"transcription_max_file_size_mb": cint(get_settings().transcription_max_file_size_mb) or 25,
+		"transcription_use_vocal_stem_by_default": bool(cint(get_settings().transcription_use_vocal_stem_by_default)),
+		"transcription_prompt_enabled": bool(cint(get_settings().transcription_prompt_enabled)),
+		"transcription_prompt_text": get_settings().transcription_prompt_text,
+		"transcription_audio_preprocess_enabled": bool(cint(get_settings().transcription_audio_preprocess_enabled)),
+		"transcription_chunking_enabled": bool(cint(get_settings().transcription_chunking_enabled)),
 		**karaoke_style_settings_payload(),
 	}
 
@@ -1081,7 +1104,12 @@ def create_job_zip(job_name: str):
 
 
 @frappe.whitelist()
-def start_transcription(job_name: str, source: str = "Vocal", language: str | None = None):
+def start_transcription(
+	job_name: str,
+	source: str | None = None,
+	language: str | None = None,
+	prompt: str | None = None,
+):
 	_require_app_access()
 	job = _get_job_for_user(job_name)
 	settings = get_settings()
@@ -1093,6 +1121,11 @@ def start_transcription(job_name: str, source: str = "Vocal", language: str | No
 		can_start_transcription_source,
 		enqueue_transcription,
 		transcription_queue_is_stale,
+	)
+	from audio_stem.utils.transcription_quality import (
+		resolve_default_transcription_source,
+		resolve_transcription_language,
+		validate_transcription_prompt_text,
 	)
 
 	if not is_openai_transcription_enabled():
@@ -1109,6 +1142,7 @@ def start_transcription(job_name: str, source: str = "Vocal", language: str | No
 		if not transcription_queue_is_stale(job):
 			return {**_job_detail_payload(job), "already_active": True}
 
+	source = (source or resolve_default_transcription_source(settings)).strip()
 	can_start, blocked_reason = can_start_transcription_source(job, source)
 	if not can_start:
 		frappe.throw(blocked_reason or _("Transcription cannot be started."), frappe.ValidationError)
@@ -1118,8 +1152,10 @@ def start_transcription(job_name: str, source: str = "Vocal", language: str | No
 	if not _is_system_manager(job.user):
 		ensure_start_allowed(job.user)
 
-	language = language or settings.default_transcription_language
-	enqueue_transcription(job, source=source, language=language)
+	language = resolve_transcription_language(language or settings.default_transcription_language, settings)
+	if prompt:
+		validate_transcription_prompt_text(prompt)
+	enqueue_transcription(job, source=source, language=language, prompt=prompt)
 	log_audit(
 		"Start Transcription",
 		reference_doctype=job.doctype,
@@ -1136,6 +1172,16 @@ def get_transcription_status(job_name: str):
 	_require_app_access()
 	job = _get_job_for_user(job_name)
 	return _transcription_karaoke_payload(job)
+
+
+@frappe.whitelist()
+def get_transcription_input_check(job_name: str, source: str = "Vocal", probe_external: int = 0):
+	"""Read-only preview of which audio file/profile would be sent to whisper-1."""
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+	from audio_stem.utils.transcription_input_check import build_whisper_input_report
+
+	return build_whisper_input_report(job, source, probe_external=cint(probe_external))
 
 
 @frappe.whitelist()

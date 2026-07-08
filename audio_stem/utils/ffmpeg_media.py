@@ -9,7 +9,7 @@ import tempfile
 
 import frappe
 from frappe import _
-from frappe.utils import cint
+from frappe.utils import cint, flt
 
 from audio_stem.utils.limits import get_settings
 
@@ -120,6 +120,80 @@ def probe_media_duration(path: str) -> float | None:
 		return None
 
 
+def probe_audio_stream_info(path: str) -> dict | None:
+	"""Return first audio stream metadata via ffprobe, or None when unavailable."""
+	if not path or not os.path.isfile(path):
+		return None
+	if not is_ffprobe_available():
+		return None
+
+	try:
+		result = subprocess.run(
+			[
+				"ffprobe",
+				"-v",
+				"error",
+				"-select_streams",
+				"a:0",
+				"-show_entries",
+				"stream=codec_name,channels,sample_rate,bit_rate",
+				"-of",
+				"json",
+				path,
+			],
+			capture_output=True,
+			text=True,
+			check=False,
+			timeout=get_ffprobe_timeout_seconds(),
+		)
+	except (OSError, subprocess.TimeoutExpired):
+		return None
+
+	if result.returncode != 0:
+		return None
+
+	try:
+		payload = json.loads(result.stdout or "{}")
+	except json.JSONDecodeError:
+		return None
+
+	streams = payload.get("streams")
+	if not isinstance(streams, list) or not streams:
+		return None
+
+	stream = streams[0]
+	if not isinstance(stream, dict):
+		return None
+
+	info: dict = {}
+	codec = stream.get("codec_name")
+	if codec:
+		info["codec"] = codec
+
+	channels = stream.get("channels")
+	if channels is not None:
+		try:
+			info["channels"] = int(channels)
+		except (TypeError, ValueError):
+			pass
+
+	sample_rate = stream.get("sample_rate")
+	if sample_rate is not None:
+		try:
+			info["sample_rate"] = int(sample_rate)
+		except (TypeError, ValueError):
+			pass
+
+	bit_rate = stream.get("bit_rate")
+	if bit_rate is not None:
+		try:
+			info["bitrate_kbps"] = round(int(bit_rate) / 1000)
+		except (TypeError, ValueError):
+			pass
+
+	return info or None
+
+
 def build_prepare_video_background_ffmpeg_args(
 	*,
 	video_path: str,
@@ -217,6 +291,65 @@ def transcode_audio_mono_mp3(input_path: str, *, bitrate: str = "64k") -> str:
 		],
 		error_title="ffmpeg audio transcode failed",
 	)
+	return output_path
+
+
+def extract_audio_segment(
+	input_path: str,
+	*,
+	start_seconds: float,
+	duration_seconds: float,
+	sample_rate: int = 16000,
+	channels: int = 1,
+	bitrate: str = "64k",
+) -> str:
+	output_path = tempfile.mktemp(suffix=".mp3")
+	_run_ffmpeg(
+		[
+			"-i",
+			input_path,
+			"-ss",
+			str(max(flt(start_seconds), 0)),
+			"-t",
+			str(max(flt(duration_seconds), 0.1)),
+			"-vn",
+			"-ac",
+			str(max(cint(channels), 1)),
+			"-ar",
+			str(max(cint(sample_rate), 8000)),
+			"-b:a",
+			bitrate or "64k",
+			output_path,
+		],
+		error_title="ffmpeg audio chunk extraction failed",
+	)
+	return output_path
+
+
+def preprocess_audio_for_transcription(
+	input_path: str,
+	*,
+	sample_rate: int = 16000,
+	channels: int = 1,
+	bitrate: str = "64k",
+	normalize_volume: bool = True,
+) -> str:
+	output_path = tempfile.mktemp(suffix=".mp3")
+	args = ["-i", input_path, "-vn"]
+	if normalize_volume:
+		args.extend(["-af", "loudnorm=I=-16:TP=-1.5:LRA=11"])
+	args.extend(
+		[
+			"-ac",
+			str(max(cint(channels), 1)),
+			"-ar",
+			str(max(cint(sample_rate), 8000)),
+			"-b:a",
+			bitrate or "64k",
+			output_path,
+		]
+	)
+	_run_ffmpeg(args, error_title="ffmpeg transcription preprocess failed")
 	return output_path
 
 

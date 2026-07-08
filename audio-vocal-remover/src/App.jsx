@@ -619,13 +619,18 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 		}
 	};
 
-	const handleTranscription = async (name, source, language) => {
+	const handleTranscription = async (name, source, language, prompt) => {
 		if (transcribing) return;
 		setTranscribing(true);
 		setError(null);
 		try {
 			const result = unwrapFrappeMessage(
-				await startTranscription({ job_name: name, source, language: language || undefined })
+				await startTranscription({
+					job_name: name,
+					source,
+					language: language || undefined,
+					prompt: prompt || undefined,
+				})
 			);
 			setJobName(name);
 			setJob(result);

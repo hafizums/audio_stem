@@ -51,6 +51,18 @@
   "subtitle_min_word_duration_seconds",
   "subtitle_snap_overlaps",
   "charge_credits_for_transcription",
+  "section_break_transcription_quality",
+  "transcription_audio_preprocess_enabled",
+  "transcription_preprocess_sample_rate",
+  "transcription_preprocess_channels",
+  "transcription_preprocess_bitrate",
+  "transcription_use_vocal_stem_by_default",
+  "transcription_prompt_enabled",
+  "transcription_prompt_text",
+  "transcription_chunking_enabled",
+  "transcription_chunk_seconds",
+  "transcription_chunk_overlap_seconds",
+  "transcription_force_language",
   "section_break_karaoke",
   "karaoke_enabled",
   "karaoke_ass_enabled",
@@ -374,6 +386,81 @@
    "fieldname": "charge_credits_for_transcription",
    "fieldtype": "Check",
    "label": "Charge Credits For Transcription"
+  },
+  {
+   "fieldname": "section_break_transcription_quality",
+   "fieldtype": "Section Break",
+   "label": "Transcription Quality"
+  },
+  {
+   "default": "1",
+   "fieldname": "transcription_audio_preprocess_enabled",
+   "fieldtype": "Check",
+   "label": "Transcription Audio Preprocess Enabled"
+  },
+  {
+   "default": "16000",
+   "fieldname": "transcription_preprocess_sample_rate",
+   "fieldtype": "Int",
+   "label": "Transcription Preprocess Sample Rate",
+   "non_negative": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "transcription_preprocess_channels",
+   "fieldtype": "Int",
+   "label": "Transcription Preprocess Channels",
+   "non_negative": 1
+  },
+  {
+   "default": "64k",
+   "fieldname": "transcription_preprocess_bitrate",
+   "fieldtype": "Data",
+   "label": "Transcription Preprocess Bitrate"
+  },
+  {
+   "default": "1",
+   "fieldname": "transcription_use_vocal_stem_by_default",
+   "fieldtype": "Check",
+   "label": "Use Vocal Stem By Default"
+  },
+  {
+   "default": "1",
+   "fieldname": "transcription_prompt_enabled",
+   "fieldtype": "Check",
+   "label": "Transcription Prompt Enabled",
+   "description": "When enabled, send an optional short lyric/style sample to Whisper. Do not use instructions."
+  },
+  {
+   "fieldname": "transcription_prompt_text",
+   "fieldtype": "Small Text",
+   "label": "Transcription Prompt Text",
+   "description": "Optional short lyric spelling sample for Whisper (not instructions). Leave blank for auto-detect."
+  },
+  {
+   "default": "0",
+   "fieldname": "transcription_chunking_enabled",
+   "fieldtype": "Check",
+   "label": "Transcription Chunking Enabled"
+  },
+  {
+   "default": "45",
+   "fieldname": "transcription_chunk_seconds",
+   "fieldtype": "Int",
+   "label": "Transcription Chunk Seconds",
+   "non_negative": 1
+  },
+  {
+   "default": "3",
+   "fieldname": "transcription_chunk_overlap_seconds",
+   "fieldtype": "Int",
+   "label": "Transcription Chunk Overlap Seconds",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "transcription_force_language",
+   "fieldtype": "Data",
+   "label": "Transcription Force Language"
   },
   {
    "fieldname": "section_break_karaoke",

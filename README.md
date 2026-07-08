@@ -784,12 +784,70 @@ bench --site jomveo run-tests --app audio_stem
 | Missing API key error | Key not saved | OpenAI API key field; checklist |
 | Vocal source blocked | Separation not completed | Job status + vocal output |
 | File too large | Over 25 MB default | `transcription_max_file_size_mb`; ffmpeg compression |
+| Which audio hits whisper? | Vocal vs original vs transcode | `get_transcription_input_check` (see below) |
 | Karaoke disabled | `karaoke_enabled` off | Settings + SPA section |
 | ASS disabled | `karaoke_ass_enabled` off | Settings |
 | Karaoke needs transcription | Transcription not completed | `transcription_status` + `transcript_json_file` |
 | karaoke_engine missing | Package not installed | Admin checklist; `pip install -e apps/karaoke_engine` |
 | ffmpeg missing | Not on PATH | Only needed when video render enabled |
 | Video render failed, ASS OK | ffmpeg/ffprobe error | `karaoke_error`; Error Log (server-side only) |
+
+#### Inspect whisper-1 input (quick check)
+
+Use this read-only helper to see whether a job would send the **vocal stem** or **original upload** to OpenAI, and whether ffmpeg would transcode it first (mono 16 kHz MP3 @ 64k when over `transcription_max_file_size_mb`).
+
+```bash
+bench --site YOUR_SITE execute audio_stem.api.separation.get_transcription_input_check \
+  --kwargs "{'job_name': 'ASJ-2026-151842', 'source': 'Vocal'}"
+```
+
+Or call the whitelisted API as the job owner:
+
+`/api/method/audio_stem.api.separation.get_transcription_input_check?job_name=ASJ-...&source=Vocal`
+
+For external vocal/original URLs, add `probe_external=1` to download and inspect the file that would be sent.
+
+### Transcription Quality for Songs
+
+Whisper is a **draft** for karaoke lyrics, not a final lyric sheet. For 3-minute songs (especially Malay/English mixes), use these settings and workflow:
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `transcription_use_vocal_stem_by_default` | 1 | Prefer isolated vocal stem |
+| `transcription_audio_preprocess_enabled` | 1 | Mono 16 kHz MP3 + loudness normalize before Whisper |
+| `transcription_prompt_enabled` | 1 | Pass song/karaoke context to Whisper |
+| `transcription_force_language` | — | Optional ISO-639-1 override (`ms`, `en`) |
+| `transcription_chunking_enabled` | 0 | Split long audio into overlapping chunks (optional) |
+| `transcription_chunk_seconds` | 45 | Chunk length when chunking enabled |
+| `transcription_chunk_overlap_seconds` | 3 | Overlap between chunks |
+
+**Recommended workflow**
+
+1. Complete separation and confirm the **Vocal** stem sounds clear.
+2. Set language to `ms` or `en` when you know the song language.
+3. Run transcription and review **word count** and any **quality warning** on the Transcribe tab.
+4. Use **Edit Lyrics** for karaoke-ready wording and timing.
+5. Optionally compare with preprocessing on/off or chunking on/off for difficult songs.
+
+**Troubleshooting poor transcript**
+
+| Symptom | Try |
+| --- | --- |
+| Very few words for a long song | Vocal source + set language + retry transcription |
+| Mixed Malay/English wrong | Set `ms` or `en`; use manual editor |
+| Still rough after retry | Toggle chunking; always finish in Edit Lyrics |
+
+**Manual test checklist**
+
+1. Use a 3-minute song.
+2. Confirm Vocal source sounds clear.
+3. Set language (`ms` or `en`).
+4. Run transcription.
+5. Check word count, detected language, first segment start, bad timestamp count, and quality warning.
+6. Try preprocessing on/off.
+7. Try chunking on/off.
+8. Compare results.
+9. Correct final lyrics in the manual editor.
 
 ### Run tests
 

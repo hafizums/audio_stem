@@ -317,6 +317,35 @@ class TestAudioSeparationMilestone82(TestAudioSeparationMilestone8):
 		result = snap_word_overlaps(words)
 		self.assertGreaterEqual(result[1]["start"], result[0]["end"])
 
+	def test_snap_overlaps_enforces_minimum_word_duration(self):
+		words = [
+			{"text": "a", "start": 0.0, "end": 1.0},
+			{"text": "b", "start": 0.95, "end": 1.02},
+		]
+		result = snap_word_overlaps(words)
+		self.assertGreaterEqual(result[1]["end"] - result[1]["start"], 0.08)
+
+	def test_apply_timing_normalization_passes_validation_after_snap(self):
+		from audio_stem.utils.transcript_corrections import apply_timing_normalization, validate_transcript_edit_payload
+
+		payload = {
+			"text": "hello world",
+			"segments": [
+				{
+					"start": 0.0,
+					"end": 2.0,
+					"text": "hello world",
+					"words": [
+						{"text": "hello", "start": 0.0, "end": 1.0},
+						{"text": "world", "start": 0.95, "end": 1.02},
+					],
+				}
+			],
+			"words": [],
+		}
+		normalized = apply_timing_normalization(payload)
+		validate_transcript_edit_payload(normalized)
+
 	def test_save_transcript_corrections_api(self):
 		job = self._transcribed_job()
 		payload = self._manual_payload(text="api corrected")

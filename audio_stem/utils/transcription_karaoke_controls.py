@@ -11,7 +11,7 @@ from audio_stem.utils.limits import get_settings
 
 TRANSCRIPTION_ACTIVE_STATUSES = ("Queued", "Processing")
 KARAOKE_ACTIVE_STATUSES = ("Queued", "Rendering")
-TRANSCRIPTION_STARTABLE = ("Not Started", "Failed", "Cancelled")
+TRANSCRIPTION_STARTABLE = ("Not Started", "Failed", "Cancelled", "Completed")
 KARAOKE_STARTABLE = ("Not Started", "Failed", "Cancelled", "Completed")
 
 
@@ -51,8 +51,6 @@ def can_start_transcription(job) -> tuple[bool, str | None]:
 		return True, None
 	if status in TRANSCRIPTION_ACTIVE_STATUSES:
 		return False, _("Transcription is already in progress.")
-	if status == "Completed":
-		return False, _("Transcription is already completed.")
 	if status not in TRANSCRIPTION_STARTABLE:
 		return False, _("Transcription cannot be started for this job.")
 	if job.status in ("Queued", "Uploading", "Processing"):
@@ -99,10 +97,21 @@ def can_start_karaoke(job) -> tuple[bool, str | None]:
 	return True, None
 
 
-def enqueue_transcription(job, *, source: str, language: str | None = None):
+def enqueue_transcription(job, *, source: str, language: str | None = None, prompt: str | None = None):
+	if (job.transcription_status or "Not Started") == "Completed":
+		from audio_stem.utils.downstream_assets import mark_transcription_retry_stale
+
+		mark_transcription_retry_stale(job)
+
 	job.transcription_status = "Queued"
 	job.transcription_source = source
 	job.transcription_error = None
+	job.transcription_quality_warning = None
+	job.transcription_word_count = 0
+	job.transcription_segment_count = 0
+	job.transcription_detected_language = None
+	job.transcription_first_segment_start = None
+	job.transcription_bad_timestamp_count = 0
 	job.save(ignore_permissions=True)
 	frappe.enqueue(
 		"audio_stem.workers.transcription_worker.process_transcription",
@@ -111,6 +120,7 @@ def enqueue_transcription(job, *, source: str, language: str | None = None):
 		name=job.name,
 		source=source,
 		language=language,
+		prompt=prompt,
 	)
 
 

@@ -167,17 +167,26 @@ function TranscribeTab({
 	transcribing,
 	onTranscription,
 }) {
-	const [transcriptionSource, setTranscriptionSource] = useState("Vocal");
+	const defaultSource =
+		settings?.transcription_use_vocal_stem_by_default !== false ? "Vocal" : "Original";
+	const [transcriptionSource, setTranscriptionSource] = useState(defaultSource);
 	const [transcriptionLanguage, setTranscriptionLanguage] = useState(
 		job.default_transcription_language || settings?.default_transcription_language || ""
 	);
+	const [transcriptionPrompt, setTranscriptionPrompt] = useState("");
 
 	const openaiEnabled = job.openai_enabled || settings?.openai_enabled;
+	const promptEnabled = settings?.transcription_prompt_enabled !== false;
 	const vocalTranscriptionBlocked =
 		job.is_active || job.status !== "Completed" || !job.has_vocal;
+	const canRetryTranscription =
+		job.can_start_transcription &&
+		!transcribing &&
+		!job.is_transcription_active &&
+		(job.transcription_status === "Completed" || job.transcription_quality_unreliable);
 	const transcriptionDisabled =
 		!openaiEnabled ||
-		!job.can_start_transcription ||
+		(!job.can_start_transcription && !canRetryTranscription) ||
 		transcribing ||
 		job.is_transcription_active ||
 		(transcriptionSource === "Vocal" && vocalTranscriptionBlocked);
@@ -214,6 +223,35 @@ function TranscribeTab({
 				</div>
 			)}
 			{job.transcription_error && <SafeErrorNotice message={job.transcription_error} />}
+			{job.transcription_quality_warning && (
+				<div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+					<strong>Quality warning:</strong> {job.transcription_quality_warning}
+					{(job.transcription_detected_language ||
+						job.transcription_first_segment_start > 0 ||
+						job.transcription_bad_timestamp_count > 0) && (
+						<ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+							{job.transcription_detected_language && (
+								<li>Detected language: {job.transcription_detected_language}</li>
+							)}
+							{job.transcription_first_segment_start > 0 && (
+								<li>
+									First segment starts at {job.transcription_first_segment_start.toFixed(1)}s
+								</li>
+							)}
+							{job.transcription_bad_timestamp_count > 0 && (
+								<li>
+									{job.transcription_bad_timestamp_count} word timestamps look invalid
+								</li>
+							)}
+						</ul>
+					)}
+				</div>
+			)}
+
+			<p className="text-sm text-gray-600">
+				For songs, Whisper may produce rough lyrics. Use the <strong>Edit Lyrics</strong> tab to
+				correct wording and timing.
+			</p>
 
 			<Card title="Run transcription">
 				<div className="mb-3 flex flex-wrap items-center gap-2">
@@ -221,6 +259,11 @@ function TranscribeTab({
 					{job.transcription_cost_usd > 0 && (
 						<span className="text-xs text-gray-500">
 							Cost: {formatCost(job.transcription_cost_usd, displayCurrency)}
+						</span>
+					)}
+					{job.transcription_word_count > 0 && (
+						<span className="text-xs text-gray-500">
+							{job.transcription_word_count} words · {job.transcription_segment_count} segments
 						</span>
 					)}
 				</div>
@@ -236,6 +279,9 @@ function TranscribeTab({
 							<option value="Vocal">Vocal (recommended)</option>
 							<option value="Original">Original audio</option>
 						</select>
+						<span className="mt-1 block text-xs text-gray-500">
+							Vocal stem is usually clearer for song lyrics.
+						</span>
 					</label>
 					<label className="text-sm text-gray-700">
 						Language (optional)
@@ -244,23 +290,56 @@ function TranscribeTab({
 							className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
 							value={transcriptionLanguage}
 							onChange={(e) => setTranscriptionLanguage(e.target.value)}
-							placeholder="Auto-detect"
+							placeholder="e.g. ms or en"
 							disabled={transcribing || job.is_transcription_active}
 						/>
+						<span className="mt-1 block text-xs text-gray-500">
+							ISO-639-1 code helps Whisper for mixed Malay/English songs.
+						</span>
 					</label>
 				</div>
-				<div className="mt-3">
+				{promptEnabled && (
+					<label className="mt-3 block text-sm text-gray-700">
+						Style primer (optional)
+						<textarea
+							className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+							rows={2}
+							value={transcriptionPrompt}
+							onChange={(e) => setTranscriptionPrompt(e.target.value)}
+							placeholder="Example lyric spelling only, not instructions"
+							disabled={transcribing || job.is_transcription_active}
+						/>
+						<span className="mt-1 block text-xs text-gray-500">
+							Leave blank for best results. Whisper may repeat instruction text as fake lyrics.
+						</span>
+					</label>
+				)}
+				<div className="mt-3 flex flex-wrap gap-2">
 					<PrimaryButton
 						disabled={transcriptionDisabled}
 						onClick={() =>
-							onTranscription(job.name, transcriptionSource, transcriptionLanguage)
+							onTranscription(
+								job.name,
+								transcriptionSource,
+								transcriptionLanguage,
+								transcriptionPrompt.trim() || undefined
+							)
 						}
 					>
 						{transcribing || job.is_transcription_active
 							? "Transcribing..."
-							: "Start Transcription"}
+							: job.transcription_status === "Completed"
+								? "Start Transcription Again"
+								: "Start Transcription"}
 					</PrimaryButton>
 				</div>
+				{(job.transcription_quality_unreliable || job.transcription_suspiciously_short) &&
+					canRetryTranscription && (
+					<p className="mt-2 text-sm text-amber-800">
+						Transcript looks incomplete? Try vocal source, set language to <strong>ms</strong> or{" "}
+						<strong>en</strong>, then run transcription again.
+					</p>
+				)}
 				{job.transcription_blocked_reason && transcriptionDisabled && (
 					<p className="mt-2 text-sm text-gray-600">{job.transcription_blocked_reason}</p>
 				)}

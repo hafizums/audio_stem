@@ -201,6 +201,7 @@ def validate_transcript_edit_payload(payload: dict) -> None:
 def snap_word_overlaps(words: list[dict], *, min_gap: float = 0.0) -> list[dict]:
 	if not words:
 		return []
+	min_word_duration = _subtitle_settings()["min_word_duration"]
 	sorted_words = sorted(words, key=lambda item: (flt(item.get("start")), flt(item.get("end"))))
 	result = []
 	for word in sorted_words:
@@ -212,7 +213,11 @@ def snap_word_overlaps(words: list[dict], *, min_gap: float = 0.0) -> list[dict]
 			if curr_start < prev_end:
 				entry["start"] = prev_end + min_gap
 				if flt(entry.get("end")) <= flt(entry.get("start")):
-					entry["end"] = flt(entry.get("start")) + _subtitle_settings()["min_word_duration"]
+					entry["end"] = flt(entry.get("start")) + min_word_duration
+		start = flt(entry.get("start"))
+		end = flt(entry.get("end"))
+		if end - start < min_word_duration:
+			entry["end"] = start + min_word_duration
 		result.append(entry)
 	return result
 
@@ -406,6 +411,8 @@ def load_transcript_for_edit(job) -> dict:
 		data = _load_json_file(job.transcript_json_file)
 
 	normalized = normalize_edit_payload(data)
+	if source == "whisper":
+		normalized = apply_timing_normalization(normalized)
 	return {
 		"source": source,
 		"manual_transcript_status": job.manual_transcript_status or "Not Started",
@@ -478,7 +485,10 @@ def save_manual_transcript(job, payload, status: str = "Saved") -> dict:
 def approve_manual_transcript(job) -> dict:
 	if not job.manual_transcript_json_file:
 		frappe.throw(_("Save manual corrections before approving."), frappe.ValidationError)
-	validate_transcript_edit_payload(_load_json_file(job.manual_transcript_json_file))
+	normalized = apply_timing_normalization(_load_json_file(job.manual_transcript_json_file))
+	validate_transcript_edit_payload(normalized)
+	_write_manual_json(job, normalized)
+	_regenerate_manual_assets(job)
 	job.manual_transcript_status = "Approved"
 	job.manual_transcript_approved_at = now_datetime()
 	job.manual_transcript_approved_by = frappe.session.user

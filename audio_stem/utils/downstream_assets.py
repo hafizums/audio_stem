@@ -58,6 +58,16 @@ def clear_downstream_stale_after_transcription_complete(job) -> None:
 		job.save(ignore_permissions=True)
 
 
+def mark_transcription_retry_stale(job) -> None:
+	job.downstream_assets_stale = 1
+	job.downstream_stale_reason = _(
+		"Transcription is being run again. Karaoke assets should be regenerated."
+	)
+	job.downstream_invalidated_at = now_datetime()
+	job.karaoke_status = "Not Started"
+	job.save(ignore_permissions=True)
+
+
 def has_current_transcription_assets(job) -> bool:
 	if cint(job.get("downstream_assets_stale")):
 		return False
