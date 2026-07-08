@@ -8,6 +8,7 @@ import {
 } from "frappe-react-sdk";
 import AdminSection from "./AdminSection";
 import JobDetailPanel, { StatusBadge } from "./JobDetailPanel";
+import { StatusPill, Card } from "./components/ui";
 import {
 	ACTIVE_STATUSES,
 	TERMINAL_STATUSES,
@@ -22,20 +23,9 @@ import {
 	unwrapFrappeMessage,
 } from "./utils";
 
-function Section({ title, children, className = "" }) {
-	return (
-		<section
-			className={`rounded-lg border border-gray-200 bg-white p-4 shadow-sm ${className}`}
-		>
-			{title && <h2 className="mb-3 text-base font-semibold text-gray-900">{title}</h2>}
-			{children}
-		</section>
-	);
-}
-
 function LoginPrompt() {
 	return (
-		<div className="mx-auto max-w-lg rounded-lg border border-amber-200 bg-amber-50 p-6 text-center">
+		<div className="mx-auto max-w-lg rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
 			<h1 className="text-xl font-semibold text-gray-900">Audio Vocal Remover</h1>
 			<p className="mt-2 text-sm text-gray-600">
 				Please log in to upload audio and run separation jobs.
@@ -50,57 +40,9 @@ function LoginPrompt() {
 	);
 }
 
-function DailyUsageSection({ dailyUsage, displayCurrency }) {
-	if (!dailyUsage?.limits_enabled) return null;
-
-	return (
-		<Section title="Daily Usage">
-			<div className="space-y-1 text-sm text-gray-700">
-				<p>
-					Jobs today: <strong>{dailyUsage.jobs_today}</strong>
-					{dailyUsage.daily_job_limit_per_user > 0 && (
-						<>
-							{" "}
-							/ {dailyUsage.daily_job_limit_per_user}
-							{dailyUsage.jobs_remaining != null && (
-								<> ({dailyUsage.jobs_remaining} remaining)</>
-							)}
-						</>
-					)}
-				</p>
-				<p>
-					Duration today: <strong>{dailyUsage.duration_seconds_today}s</strong>
-					{dailyUsage.daily_duration_limit_seconds_per_user > 0 && (
-						<>
-							{" "}
-							/ {dailyUsage.daily_duration_limit_seconds_per_user}s
-							{dailyUsage.duration_seconds_remaining != null && (
-								<> ({dailyUsage.duration_seconds_remaining}s remaining)</>
-							)}
-						</>
-					)}
-				</p>
-				<p>
-					Estimated cost today:{" "}
-					<strong>{formatCost(dailyUsage.cost_usd_today, displayCurrency)}</strong>
-					{dailyUsage.daily_cost_limit_usd_per_user > 0 && (
-						<>
-							{" "}
-							/ {formatCost(dailyUsage.daily_cost_limit_usd_per_user, displayCurrency)}
-							{dailyUsage.cost_usd_remaining != null && (
-								<> ({formatCost(dailyUsage.cost_usd_remaining, displayCurrency)} remaining)</>
-							)}
-						</>
-					)}
-				</p>
-			</div>
-		</Section>
-	);
-}
-
 function PilotBlockedView({ currentUser, settings }) {
 	return (
-		<div className="min-h-screen bg-gray-100">
+		<div className="min-h-screen bg-gray-50">
 			<header className="border-b border-gray-200 bg-white">
 				<div className="mx-auto max-w-6xl px-4 py-4">
 					<h1 className="text-lg font-bold text-gray-900">Audio Vocal Remover</h1>
@@ -116,6 +58,303 @@ function PilotBlockedView({ currentUser, settings }) {
 					</p>
 				</div>
 			</main>
+		</div>
+	);
+}
+
+function UploadCard({
+	settings,
+	uploading,
+	onFileChange,
+	displayCurrency,
+	credit,
+	estimatedCost,
+	job,
+}) {
+	return (
+		<Card title="Upload audio">
+			<ul className="mb-4 space-y-1 text-sm text-gray-600">
+				<li>
+					Supported formats: {settings?.accepted_file_types || "MP3, WAV, M4A, FLAC, OGG, AAC"}
+				</li>
+				<li>
+					Max file size: <strong>{settings?.max_file_size_mb ?? "—"} MB</strong>. Max duration:{" "}
+					<strong>{settings?.max_audio_duration_seconds ?? "—"}s</strong>.
+				</li>
+				{settings?.credit_management_enabled && (
+					<li>Credits are required before starting separation.</li>
+				)}
+				{settings?.daily_usage?.limits_enabled && (
+					<li>Daily job, duration, and cost limits apply.</li>
+				)}
+			</ul>
+
+			<label className="flex w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-10 text-center hover:border-purple-400 hover:bg-purple-50">
+				<span className="text-base font-semibold text-gray-800">
+					{uploading ? "Uploading..." : "Tap or drop an audio file here"}
+				</span>
+				<span className="mt-1 text-xs text-gray-500">
+					We will create a draft job and detect its duration automatically.
+				</span>
+				<input
+					type="file"
+					className="hidden"
+					accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.aac"
+					disabled={uploading}
+					onChange={onFileChange}
+				/>
+			</label>
+
+			{settings?.credit_management_enabled && (
+				<div className="mt-4 rounded-md border border-indigo-100 bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
+					<p>
+						Available credit:{" "}
+						<strong>{formatCost(credit?.available_balance, displayCurrency)}</strong>
+					</p>
+					{credit?.error && <p className="mt-1 text-red-700">{credit.error}</p>}
+				</div>
+			)}
+		</Card>
+	);
+}
+
+function JobSidebarSummary({ job, settings, displayCurrency, estimatedCost, credit }) {
+	if (!job) return null;
+	return (
+		<Card title="Job summary">
+			<dl className="space-y-2 text-sm">
+				<div className="flex items-baseline justify-between gap-3">
+					<dt className="text-gray-500">Status</dt>
+					<dd className="text-right">
+						<StatusBadge status={job.status} />
+					</dd>
+				</div>
+				<div className="flex items-baseline justify-between gap-3">
+					<dt className="text-gray-500">Duration</dt>
+					<dd className="text-right font-medium text-gray-900">
+						{job.duration_seconds ? `${job.duration_seconds}s` : "—"}
+					</dd>
+				</div>
+				<div className="flex items-baseline justify-between gap-3">
+					<dt className="text-gray-500">Estimated cost</dt>
+					<dd className="text-right font-medium text-gray-900">
+						{formatCost(estimatedCost, displayCurrency)}
+					</dd>
+				</div>
+				<div className="flex items-baseline justify-between gap-3">
+					<dt className="text-gray-500">Created</dt>
+					<dd className="text-right font-medium text-gray-900">
+						{formatDateTime(job.creation) || "—"}
+					</dd>
+				</div>
+				{settings?.credit_management_enabled && (
+					<div className="flex items-baseline justify-between gap-3">
+						<dt className="text-gray-500">Credit status</dt>
+						<dd className="text-right font-medium text-gray-900">
+							{job.credit_status || "—"}
+						</dd>
+					</div>
+				)}
+			</dl>
+
+			{job.transcription_status && job.transcription_status !== "Not Started" && (
+				<div className="mt-3 border-t border-gray-100 pt-3 text-sm">
+					<p className="text-gray-500">Transcription</p>
+					<p className="mt-1 font-medium text-gray-900">
+						<StatusBadge status={job.transcription_status} />
+					</p>
+				</div>
+			)}
+			{job.karaoke_status && job.karaoke_status !== "Not Started" && (
+				<div className="mt-3 border-t border-gray-100 pt-3 text-sm">
+					<p className="text-gray-500">Karaoke</p>
+					<p className="mt-1 font-medium text-gray-900">
+						<StatusBadge status={job.karaoke_status} />
+					</p>
+				</div>
+			)}
+
+			{settings?.credit_management_enabled && credit?.error && (
+				<p className="mt-3 text-xs text-red-600">{credit.error}</p>
+			)}
+		</Card>
+	);
+}
+
+function DailyUsageCard({ dailyUsage, displayCurrency }) {
+	if (!dailyUsage?.limits_enabled) return null;
+	return (
+		<Card title="Today's usage">
+			<dl className="space-y-1 text-sm text-gray-700">
+				<div className="flex justify-between">
+					<dt>Jobs</dt>
+					<dd className="font-medium">
+						{dailyUsage.jobs_today}
+						{dailyUsage.daily_job_limit_per_user > 0
+							? ` / ${dailyUsage.daily_job_limit_per_user}`
+							: ""}
+					</dd>
+				</div>
+				<div className="flex justify-between">
+					<dt>Duration</dt>
+					<dd className="font-medium">
+						{dailyUsage.duration_seconds_today}s
+						{dailyUsage.daily_duration_limit_seconds_per_user > 0
+							? ` / ${dailyUsage.daily_duration_limit_seconds_per_user}s`
+							: ""}
+					</dd>
+				</div>
+				<div className="flex justify-between">
+					<dt>Est. cost</dt>
+					<dd className="font-medium">
+						{formatCost(dailyUsage.cost_usd_today, displayCurrency)}
+					</dd>
+				</div>
+			</dl>
+		</Card>
+	);
+}
+
+function RecentJobsTable({
+	recentJobs,
+	jobName,
+	onOpen,
+	onCancel,
+	onRetry,
+	onZip,
+	cancelling,
+	retrying,
+	zipping,
+	settings,
+}) {
+	if (!recentJobs?.length) {
+		return (
+			<div className="rounded-xl border border-dashed border-gray-300 bg-white px-4 py-10 text-center">
+				<p className="text-sm font-medium text-gray-700">No jobs yet</p>
+				<p className="mt-1 text-sm text-gray-500">
+					Upload your first audio file to create a separation job.
+				</p>
+			</div>
+		);
+	}
+	return (
+		<div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+			<table className="min-w-full text-sm">
+				<thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+					<tr>
+						<th className="px-3 py-2">File</th>
+						<th className="px-3 py-2">Status</th>
+						<th className="hidden px-3 py-2 sm:table-cell">Step</th>
+						<th className="hidden px-3 py-2 md:table-cell">Created</th>
+						<th className="hidden px-3 py-2 lg:table-cell">Duration</th>
+						<th className="px-3 py-2 text-right">Actions</th>
+					</tr>
+				</thead>
+				<tbody className="divide-y divide-gray-100">
+					{recentJobs.map((row) => {
+						const step = row.transcription_status === "Completed"
+							? row.karaoke_status === "Completed"
+								? "Karaoke done"
+								: "Karaoke"
+							: row.transcription_status && row.transcription_status !== "Not Started"
+								? "Transcribe"
+								: row.status === "Completed"
+									? "Transcribe"
+									: "Separate";
+						return (
+							<tr
+								key={row.name}
+								className={`hover:bg-gray-50 ${jobName === row.name ? "bg-purple-50" : ""}`}
+							>
+								<td className="px-3 py-2">
+									<div className="font-medium text-gray-900">
+										{row.original_filename || row.name}
+									</div>
+									<div className="text-xs text-gray-500">{row.name}</div>
+								</td>
+								<td className="px-3 py-2">
+									<StatusBadge status={row.status} />
+								</td>
+								<td className="hidden px-3 py-2 text-gray-700 sm:table-cell">{step}</td>
+								<td className="hidden px-3 py-2 text-gray-700 md:table-cell">
+									{formatDateTime(row.creation) || "—"}
+								</td>
+								<td className="hidden px-3 py-2 text-gray-700 lg:table-cell">
+									{row.duration_seconds ? `${row.duration_seconds}s` : "—"}
+								</td>
+								<td className="px-3 py-2">
+									<div className="flex flex-wrap justify-end gap-2">
+										<button
+											type="button"
+											onClick={() => onOpen(row.name)}
+											className="text-sm text-blue-600 hover:underline"
+										>
+											View
+										</button>
+										{row.can_cancel && (
+											<button
+												type="button"
+												disabled={cancelling}
+												onClick={() => onCancel(row.name)}
+												className="text-sm text-gray-700 hover:underline disabled:opacity-50"
+											>
+												Cancel
+											</button>
+										)}
+										{row.can_retry && (
+											<button
+												type="button"
+												disabled={retrying}
+												onClick={() => onRetry(row.name)}
+												className="text-sm text-amber-700 hover:underline disabled:opacity-50"
+											>
+												Retry
+											</button>
+										)}
+										{row.can_zip && (
+											<button
+												type="button"
+												disabled={zipping}
+												onClick={() => onZip(row.name)}
+												className="text-sm text-green-700 hover:underline disabled:opacity-50"
+											>
+												ZIP
+											</button>
+										)}
+									</div>
+								</td>
+							</tr>
+						);
+					})}
+				</tbody>
+			</table>
+		</div>
+	);
+}
+
+function AdminToolsPanel() {
+	const [open, setOpen] = useState(false);
+	return (
+		<div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+			<button
+				type="button"
+				onClick={() => setOpen((v) => !v)}
+				className="flex w-full items-center justify-between px-5 py-4 text-left"
+				aria-expanded={open}
+			>
+				<div>
+					<p className="text-sm font-semibold text-gray-900">Admin tools</p>
+					<p className="text-xs text-gray-500">
+						System Manager only. Collapsed by default.
+					</p>
+				</div>
+				<span className="text-sm text-gray-500">{open ? "Hide" : "Show"}</span>
+			</button>
+			{open && (
+				<div className="border-t border-gray-100 p-5">
+					<AdminSection />
+				</div>
+			)}
 		</div>
 	);
 }
@@ -158,9 +397,7 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 	const { call: retryFailedJob } = useFrappePostCall(
 		"audio_stem.api.separation.retry_failed_job"
 	);
-	const { call: createJobZip } = useFrappePostCall(
-		"audio_stem.api.separation.create_job_zip"
-	);
+	const { call: createJobZip } = useFrappePostCall("audio_stem.api.separation.create_job_zip");
 	const { call: getJobDetail } = useFrappePostCall(
 		"audio_stem.api.separation.get_job_detail"
 	);
@@ -229,9 +466,7 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 			ACTIVE_STATUSES.includes(nextJob?.status) ||
 			nextJob?.is_transcription_active ||
 			nextJob?.is_karaoke_active;
-		if (!shouldPoll) {
-			stopPolling();
-		}
+		if (!shouldPoll) stopPolling();
 		if (
 			TERMINAL_STATUSES.includes(nextJob?.status) &&
 			!nextJob?.is_transcription_active &&
@@ -265,7 +500,6 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 		const file = event.target.files?.[0];
 		event.target.value = "";
 		if (!file) return;
-
 		setError(null);
 		setUploading(true);
 		try {
@@ -275,12 +509,8 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 				undefined,
 				"audio_stem.api.separation.upload_audio_file"
 			);
-			const created = unwrapFrappeMessage(
-				await createJob({ file_url: uploaded.file_url })
-			);
-			if (!created?.name) {
-				throw new Error("Job was created but no job ID was returned.");
-			}
+			const created = unwrapFrappeMessage(await createJob({ file_url: uploaded.file_url }));
+			if (!created?.name) throw new Error("Job was created but no job ID was returned.");
 			setJobName(created.name);
 			setJob(created);
 			await refreshRecent();
@@ -299,16 +529,11 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 			setError("Audio separation is disabled in Audio Separation Settings.");
 			return;
 		}
-
 		setStarting(true);
 		setError(null);
 		try {
-			const result = unwrapFrappeMessage(
-				await startSeparation({ job_name: jobName })
-			);
-			if (result) {
-				setJob((prev) => ({ ...prev, ...result }));
-			}
+			const result = unwrapFrappeMessage(await startSeparation({ job_name: jobName }));
+			if (result) setJob((prev) => ({ ...prev, ...result }));
 			await fetchJobDetail();
 			await refreshCredit();
 			await refreshSettings();
@@ -327,9 +552,7 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 		try {
 			const result = unwrapFrappeMessage(await retryFailedJob({ job_name: name }));
 			setJobName(name);
-			if (result) {
-				setJob((prev) => ({ ...(prev?.name === name ? prev : {}), ...result }));
-			}
+			if (result) setJob((prev) => ({ ...(prev?.name === name ? prev : {}), ...result }));
 			await fetchJobDetail();
 			await refreshRecent();
 			await refreshCredit();
@@ -383,10 +606,7 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 		setError(null);
 		try {
 			const result = unwrapFrappeMessage(
-				await startKaraokeRender({
-					job_name: name,
-					karaoke_source_mode: karaokeSourceMode,
-				})
+				await startKaraokeRender({ job_name: name, karaoke_source_mode: karaokeSourceMode })
 			);
 			setJobName(name);
 			setJob(result);
@@ -433,7 +653,6 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 		async (name) => unwrapFrappeMessage(await getTranscriptForEdit({ job_name: name })),
 		[getTranscriptForEdit]
 	);
-
 	const handleSaveTranscript = useCallback(
 		async (name, payload) =>
 			unwrapFrappeMessage(
@@ -441,7 +660,6 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 			),
 		[saveTranscriptCorrections]
 	);
-
 	const handleApproveTranscript = useCallback(
 		async (name, payload) => {
 			await handleSaveTranscript(name, payload);
@@ -449,7 +667,6 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 		},
 		[approveTranscriptCorrections, handleSaveTranscript]
 	);
-
 	const handleResetTranscript = useCallback(
 		async (name) => {
 			const result = unwrapFrappeMessage(await resetManualTranscript({ job_name: name }));
@@ -458,7 +675,6 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 		},
 		[resetManualTranscript]
 	);
-
 	const handleRegenerateSubtitles = useCallback(
 		async (name) => {
 			const result = unwrapFrappeMessage(
@@ -469,7 +685,6 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 		},
 		[regenerateSubtitleAssets]
 	);
-
 	const handleDownloadManualTranscript = useCallback(
 		async (name, assetType) => {
 			setError(null);
@@ -477,49 +692,38 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 				const result = unwrapFrappeMessage(
 					await downloadManualTranscriptAsset({ job_name: name, asset_type: assetType })
 				);
-				if (result?.file_url) {
-					window.open(result.file_url, "_blank", "noopener,noreferrer");
-				}
+				if (result?.file_url) window.open(result.file_url, "_blank", "noopener,noreferrer");
 			} catch (err) {
 				setError(parseFrappeError(err) || err.message || "Failed to download manual transcript");
 			}
 		},
 		[downloadManualTranscriptAsset]
 	);
-
 	const handleDownloadTranscript = async (name, assetType) => {
 		setError(null);
 		try {
 			const result = unwrapFrappeMessage(
 				await downloadTranscriptAsset({ job_name: name, asset_type: assetType })
 			);
-			if (result?.file_url) {
-				window.open(result.file_url, "_blank", "noopener,noreferrer");
-			}
+			if (result?.file_url) window.open(result.file_url, "_blank", "noopener,noreferrer");
 		} catch (err) {
 			setError(parseFrappeError(err) || err.message || "Failed to download transcript");
 		}
 	};
-
 	const handleZip = async (name) => {
 		if (zipping) return;
 		setZipping(true);
 		setError(null);
 		try {
 			const result = unwrapFrappeMessage(await createJobZip({ job_name: name }));
-			if (result?.zip_file) {
-				window.open(result.zip_file, "_blank", "noopener,noreferrer");
-			}
-			if (jobName === name) {
-				await fetchJobDetail();
-			}
+			if (result?.zip_file) window.open(result.zip_file, "_blank", "noopener,noreferrer");
+			if (jobName === name) await fetchJobDetail();
 		} catch (err) {
 			setError(parseFrappeError(err) || err.message || "Failed to create ZIP file");
 		} finally {
 			setZipping(false);
 		}
 	};
-
 	const loadJob = async (name) => {
 		setJobName(name);
 		setError(null);
@@ -528,272 +732,114 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 	};
 
 	return (
-		<div className="min-h-screen bg-gray-100">
+		<div className="min-h-screen bg-gray-50">
 			<header className="border-b border-gray-200 bg-white">
-				<div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+				<div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-5 sm:flex-row sm:items-center sm:justify-between">
 					<div>
-						<h1 className="text-lg font-bold text-gray-900">Audio Vocal Remover</h1>
-						<p className="text-sm text-gray-500">
-							Upload an audio file and generate separate vocal and instrumental tracks.
+						<h1 className="text-xl font-bold text-gray-900">Audio Vocal Remover</h1>
+						<p className="mt-0.5 text-sm text-gray-500">
+							Separate vocals, transcribe lyrics, and create karaoke subtitles.
 						</p>
 					</div>
-					<div className="text-sm text-gray-600 sm:text-right">
-						<p>{currentUser}</p>
-						<a
-							href="/login?redirect-to=/audio-vocal-remover"
-							className="text-blue-600 hover:underline"
-						>
-							Switch account
-						</a>
+					<div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-4">
+						<StatusPill settings={settings} credit={credit} />
+						<div className="text-sm text-gray-600">
+							<span>{currentUser}</span>
+							<a
+								href="/login?redirect-to=/audio-vocal-remover"
+								className="ml-3 text-blue-600 hover:underline"
+							>
+								Switch account
+							</a>
+						</div>
 					</div>
 				</div>
 			</header>
 
-			<main className="mx-auto max-w-6xl space-y-4 p-4">
+			<main className="mx-auto max-w-6xl space-y-6 p-4">
 				{error && (
 					<div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
 						{error}
 					</div>
 				)}
 
-				<Section title="">
-					<p className="text-sm text-gray-700">
-						Upload an audio file and generate separate vocal and instrumental tracks using
-						WaveSpeed.
-					</p>
-					<ul className="mt-3 list-inside list-disc space-y-1 text-sm text-gray-600">
-						<li>
-							Accepted types: {settings?.accepted_file_types || "MP3, WAV, M4A, FLAC, OGG, AAC"}
-						</li>
-						<li>
-							Max file size: {settings?.max_file_size_mb ?? "—"} MB. Max duration:{" "}
-							{settings?.max_audio_duration_seconds ?? "—"} seconds.
-						</li>
-						{settings?.credit_management_enabled && (
-							<li>Credits are required before starting separation when credit integration is enabled.</li>
-						)}
-					</ul>
-				</Section>
+				<div className="grid gap-6 lg:grid-cols-3">
+					<div className="space-y-4 lg:col-span-2">
+						<UploadCard
+							settings={settings}
+							uploading={uploading}
+							onFileChange={handleFileChange}
+							displayCurrency={displayCurrency}
+							credit={credit}
+							estimatedCost={estimatedCost}
+							job={job}
+						/>
 
-				<DailyUsageSection dailyUsage={settings?.daily_usage} displayCurrency={displayCurrency} />
-
-				<div className="grid gap-4 lg:grid-cols-2">
-					<div className="space-y-4">
-						<Section title="Upload Audio">
-							{uploading && (
-								<p className="mb-3 text-sm text-blue-700">Uploading and creating job...</p>
-							)}
-							{jobName && !uploading && (
-								<p className="mb-3 text-sm text-gray-500">
-									Job <strong>{jobName}</strong> created. Upload another file to start over.
-								</p>
-							)}
-							<label className="flex w-full cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-sm font-medium text-gray-700 hover:border-gray-400 hover:bg-gray-100 sm:py-10">
-								{uploading ? "Uploading..." : "Tap or click to upload audio"}
-								<input
-									type="file"
-									className="hidden"
-									accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.aac"
-									disabled={uploading}
-									onChange={handleFileChange}
-								/>
-							</label>
-						</Section>
-
-						{job && job.status === "Draft" && (
-							<Section title="Cost Estimate">
-								{job.duration_seconds ? (
-									<p className="text-sm text-gray-700">
-										Duration: <strong>{job.duration_seconds}s</strong>
-										<br />
-										Estimated provider cost:{" "}
-										<strong>{formatCost(estimatedCost, displayCurrency)}</strong>
-									</p>
-								) : (
-									<p className="text-sm text-amber-700">
-										Audio duration is unknown. Separation cannot be started until duration is
-										available.
-									</p>
-								)}
-							</Section>
-						)}
-
-						{settings?.credit_management_enabled && (
-							<Section title="Credits">
-								{credit.error ? (
-									<p className="text-sm text-red-600">
-										Credit integration is unavailable: {credit.error}
-									</p>
-								) : (
-									<div className="space-y-1 text-sm text-gray-700">
-										<p>
-											Available balance:{" "}
-											<strong>{formatCost(credit.available_balance, displayCurrency)}</strong>
-										</p>
-										{job?.duration_seconds && (
-											<p>
-												Estimated job cost:{" "}
-												<strong>{formatCost(estimatedCost, displayCurrency)}</strong>
-											</p>
-										)}
-									</div>
-								)}
-							</Section>
-						)}
-
-						{job && job.status === "Draft" && (
-							<Section title="Start Separation">
-								<button
-									type="button"
-									disabled={startDisabled || job?.is_active}
-									onClick={handleStart}
-									className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-								>
-									{starting ? "Starting..." : "Start Separation"}
-								</button>
-								{startBlockedReason && (
-									<p className="mt-2 text-sm text-gray-600">{startBlockedReason}</p>
-								)}
-							</Section>
-						)}
+						<JobDetailPanel
+							job={job}
+							settings={settings}
+							displayCurrency={displayCurrency}
+							statusMessage={statusMessage}
+							onRetry={handleRetry}
+							onZip={handleZip}
+							onCancel={handleCancel}
+							onTranscription={handleTranscription}
+							onKaraoke={handleKaraoke}
+							onUploadKaraokeBackground={handleUploadKaraokeBackground}
+							onClearKaraokeBackground={handleClearKaraokeBackground}
+							onDownloadTranscript={handleDownloadTranscript}
+							onLoadTranscript={handleLoadTranscript}
+							onSaveTranscript={handleSaveTranscript}
+							onApproveTranscript={handleApproveTranscript}
+							onResetTranscript={handleResetTranscript}
+							onRegenerateSubtitles={handleRegenerateSubtitles}
+							onDownloadManualTranscript={handleDownloadManualTranscript}
+							onJobUpdated={fetchJobDetail}
+							onStart={handleStart}
+							starting={starting}
+							retrying={retrying}
+							zipping={zipping}
+							cancelling={cancelling}
+							transcribing={transcribing}
+							karaokeRendering={karaokeRendering}
+							estimatedCost={estimatedCost}
+							startDisabled={startDisabled}
+							startBlockedReason={startBlockedReason}
+						/>
 					</div>
 
-					<JobDetailPanel
-						job={job}
-						settings={settings}
-						displayCurrency={displayCurrency}
-						statusMessage={statusMessage}
-						onRetry={handleRetry}
-						onZip={handleZip}
-						onCancel={handleCancel}
-						onTranscription={handleTranscription}
-						onKaraoke={handleKaraoke}
-						onUploadKaraokeBackground={handleUploadKaraokeBackground}
-						onClearKaraokeBackground={handleClearKaraokeBackground}
-						onDownloadTranscript={handleDownloadTranscript}
-						onLoadTranscript={handleLoadTranscript}
-						onSaveTranscript={handleSaveTranscript}
-						onApproveTranscript={handleApproveTranscript}
-						onResetTranscript={handleResetTranscript}
-						onRegenerateSubtitles={handleRegenerateSubtitles}
-						onDownloadManualTranscript={handleDownloadManualTranscript}
-						onJobUpdated={fetchJobDetail}
-						retrying={retrying}
-						zipping={zipping}
-						cancelling={cancelling}
-						transcribing={transcribing}
-						karaokeRendering={karaokeRendering}
-					/>
+					<aside className="space-y-4">
+						<JobSidebarSummary
+							job={job}
+							settings={settings}
+							displayCurrency={displayCurrency}
+							estimatedCost={estimatedCost}
+							credit={credit}
+						/>
+						<DailyUsageCard
+							dailyUsage={settings?.daily_usage}
+							displayCurrency={displayCurrency}
+						/>
+					</aside>
 				</div>
 
-				<Section title="Recent Jobs">
-					{!recentJobs?.length ? (
-						<div className="rounded-md border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center">
-							<p className="text-sm font-medium text-gray-700">No jobs yet</p>
-							<p className="mt-1 text-sm text-gray-500">
-								Upload your first audio file to create a separation job.
-							</p>
-						</div>
-					) : (
-						<div className="-mx-4 overflow-x-auto sm:mx-0">
-							<table className="min-w-full border border-gray-200 text-sm">
-								<thead className="bg-gray-50">
-									<tr>
-										<th className="border-b px-2 py-2 text-left sm:px-3">Job</th>
-										<th className="hidden border-b px-2 py-2 text-left sm:table-cell sm:px-3">
-											File
-										</th>
-										<th className="border-b px-2 py-2 text-left sm:px-3">Status</th>
-										{settings?.credit_management_enabled && (
-											<th className="hidden border-b px-2 py-2 text-left md:table-cell md:px-3">
-												Credit
-											</th>
-										)}
-										<th className="hidden border-b px-2 py-2 text-left lg:table-cell lg:px-3">
-											Duration
-										</th>
-										<th className="border-b px-2 py-2 text-left sm:px-3">Actions</th>
-									</tr>
-								</thead>
-								<tbody>
-									{recentJobs.map((row) => (
-										<tr
-											key={row.name}
-											className={`hover:bg-gray-50 ${jobName === row.name ? "bg-blue-50" : ""}`}
-										>
-											<td className="border-b px-2 py-2 font-medium text-gray-900 sm:px-3">
-												{row.name}
-												<p className="text-xs text-gray-500 sm:hidden">
-													{row.original_filename || "—"}
-												</p>
-											</td>
-											<td className="hidden border-b px-2 py-2 text-gray-600 sm:table-cell sm:px-3">
-												{row.original_filename || "—"}
-											</td>
-											<td className="border-b px-2 py-2 sm:px-3">
-												<StatusBadge status={row.status} />
-												{row.error_summary && (
-													<p className="mt-1 text-xs text-red-600">{row.error_summary}</p>
-												)}
-											</td>
-											{settings?.credit_management_enabled && (
-												<td className="hidden border-b px-2 py-2 md:table-cell md:px-3">
-													{row.credit_status || "—"}
-												</td>
-											)}
-											<td className="hidden border-b px-2 py-2 lg:table-cell lg:px-3">
-												{row.duration_seconds ? `${row.duration_seconds}s` : "—"}
-											</td>
-											<td className="border-b px-2 py-2 sm:px-3">
-												<div className="flex flex-wrap gap-2">
-													<button
-														type="button"
-														onClick={() => loadJob(row.name)}
-														className="text-blue-600 hover:underline"
-													>
-														Open
-													</button>
-													{row.can_cancel && (
-														<button
-															type="button"
-															disabled={cancelling}
-															onClick={() => handleCancel(row.name)}
-															className="text-gray-700 hover:underline disabled:opacity-50"
-														>
-															Cancel
-														</button>
-													)}
-													{row.can_retry && (
-														<button
-															type="button"
-															disabled={retrying}
-															onClick={() => handleRetry(row.name)}
-															className="text-amber-700 hover:underline disabled:opacity-50"
-														>
-															Retry
-														</button>
-													)}
-													{row.can_zip && (
-														<button
-															type="button"
-															disabled={zipping}
-															onClick={() => handleZip(row.name)}
-															className="text-green-700 hover:underline disabled:opacity-50"
-														>
-															ZIP
-														</button>
-													)}
-												</div>
-											</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
-						</div>
-					)}
-				</Section>
+				<section className="space-y-3">
+					<h2 className="text-base font-semibold text-gray-900">Recent jobs</h2>
+					<RecentJobsTable
+						recentJobs={recentJobs}
+						jobName={jobName}
+						onOpen={loadJob}
+						onCancel={handleCancel}
+						onRetry={handleRetry}
+						onZip={handleZip}
+						cancelling={cancelling}
+						retrying={retrying}
+						zipping={zipping}
+						settings={settings}
+					/>
+				</section>
 
-				{settings?.is_system_manager && <AdminSection />}
+				{settings?.is_system_manager && <AdminToolsPanel />}
 			</main>
 		</div>
 	);
@@ -806,7 +852,7 @@ function AuthenticatedApp({ currentUser }) {
 	const settings = unwrapFrappeMessage(settingsResponse);
 
 	if (settingsLoading && !settings) {
-		return <div className="p-8 text-center text-gray-500">Loading...</div>;
+		return <div className="p-8 text-center text-gray-500">Loading…</div>;
 	}
 
 	if (settings?.pilot_mode_enabled && settings?.pilot_access_allowed === false) {
@@ -818,11 +864,7 @@ function AuthenticatedApp({ currentUser }) {
 
 function AppContent() {
 	const { currentUser, isLoading: authLoading } = useFrappeAuth();
-
-	if (authLoading) {
-		return <div className="p-8 text-center text-gray-500">Loading...</div>;
-	}
-
+	if (authLoading) return <div className="p-8 text-center text-gray-500">Loading…</div>;
 	if (!currentUser || currentUser === "Guest") {
 		return (
 			<div className="flex min-h-screen items-center justify-center p-6">
@@ -830,7 +872,6 @@ function AppContent() {
 			</div>
 		);
 	}
-
 	return <AuthenticatedApp currentUser={currentUser} />;
 }
 

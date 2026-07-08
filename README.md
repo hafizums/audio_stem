@@ -773,6 +773,96 @@ See the **Run tests** section near the top of this README for the recommended `a
 bench --site audio-stem-test.local run-tests --app audio_stem
 ```
 
+## Milestone 8.4 — UI redesign
+
+Milestone 8.4 redesigns `/audio-vocal-remover` into a clean product UI. No backend behavior changes — only layout, usability, visual hierarchy, and hiding of admin/debug information.
+
+### New page layout
+
+- **Header** with app name, subtitle, and status pills (Enabled / Pilot / Credits / Limits).
+- **Main column (left):** upload card + active job hero card + workflow tabs.
+- **Sidebar (right):** compact job summary and today's usage.
+- **Recent jobs:** compact table below the main area.
+- **Admin tools:** collapsed System Manager-only panel at the bottom.
+
+### Workflow tabs
+
+When a job is selected, the hero card shows the filename, status, duration, estimated cost, credit status, the recommended next step, and primary actions. Below it, five tabs reveal only the relevant controls:
+
+1. **Separate** — start separation, cancel/retry/ZIP, track previews.
+2. **Transcribe** — Whisper transcription source/language picker, lyrics preview.
+3. **Edit Lyrics** — segment-level transcript editor; word-level timing lives behind an "Advanced timing editor" toggle. Full transcript textarea is hidden by default.
+4. **Karaoke** — source mode (Auto / Original Whisper / Manual Corrected), background video upload/clear, generate button, compact MP4 preview with expand.
+5. **Downloads** — cards for available assets only (vocal, instrumental, original, ZIP, transcript JSON/SRT/VTT, manual JSON/SRT/VTT, karaoke ASS/MP4). Missing files show muted "not available" text, not error blocks.
+
+### Locked tabs
+
+Tabs show friendly locked messages when prerequisites are not met:
+
+- Transcribe before separation: "Complete audio separation first."
+- Edit Lyrics before transcription: "Run transcription before editing lyrics."
+- Karaoke before transcription: "Run transcription before karaoke."
+- Downloads before any output: "Generate karaoke subtitle first."
+
+### Admin tools
+
+The admin panel is collapsed by default and rendered only when `is_system_manager` is true. Inside, four sub-tabs organize:
+
+- **Checklist** — configuration checklist (no secrets).
+- **Queue** — queue health and stuck jobs.
+- **Provider** — provider health and 24h counts.
+- **Usage** — total/completed/failed jobs, duration, cost.
+
+Normal users never see these sections.
+
+### Visual style
+
+- Max page width 1200px, centered.
+- Rounded cards with soft borders and shadows.
+- Larger headings, comfortable spacing, status badges.
+- Compact recent jobs table (File / Status / Step / Created / Duration / Actions); cost/credit/completed hidden on small screens.
+- Video previews are small with an "Expand" toggle.
+- No raw JSON, no raw file URLs, no tracebacks in the default user view.
+
+### Mobile behavior
+
+Single column, horizontally scrollable tabs, secondary table columns hidden, buttons wrap, video fits screen width, admin panel stays collapsed.
+
+### Tests
+
+`audio_stem/tests/test_milestone8_4.py` verifies:
+
+- Admin endpoints (checklist, queue, provider, usage) require System Manager.
+- Administrator can call all admin endpoints.
+- Page settings and job detail payloads contain no `pycaps` / `playwright` / `chromium` wording.
+- API keys are not exposed in the page settings payload.
+- Raw local file paths are not exposed in the job detail payload.
+- The built frontend bundle contains no forbidden library references.
+- Runtime Python modules do not import PyCaps/Playwright.
+- Existing jobs still render a valid payload for the owner.
+
+### Manual UI smoke test
+
+```bash
+cd /home/hafiz/frappe-bench
+cd apps/audio_stem && yarn build
+cd /home/hafiz/frappe-bench
+bench build --app audio_stem
+bench --site jomveo clear-cache
+bench restart
+```
+
+1. Open `/audio-vocal-remover`.
+2. Confirm the page no longer shows all tools at once.
+3. Upload audio and confirm one clear next action is shown.
+4. Complete separation and use the Transcribe tab.
+5. Use the Edit Lyrics tab (segment editor only by default; toggle Advanced for word timing).
+6. Use the Karaoke tab.
+7. Use the Downloads tab.
+8. Confirm Recent Jobs is compact.
+9. Confirm Admin tools are collapsed and System Manager-only.
+10. Test a mobile-width viewport.
+
 #### License
 
 MIT

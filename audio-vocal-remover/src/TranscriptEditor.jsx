@@ -102,6 +102,7 @@ const SegmentRow = memo(function SegmentRow({
 	disabled,
 	saving,
 	expanded,
+	advancedMode,
 	onToggleWords,
 	onUpdateSegment,
 	onUpdateWord,
@@ -138,52 +139,58 @@ const SegmentRow = memo(function SegmentRow({
 				/>
 			</td>
 			<td className="px-2 py-2 align-top">
-				<button
-					type="button"
-					className="text-xs text-blue-600 hover:underline"
-					onClick={() => onToggleWords(index)}
-				>
-					{expanded ? "Hide" : "Edit"} words
-				</button>
-				{expanded && (
-					<div className="mt-2 space-y-2">
-						{(segment.words || []).map((word, wordIndex) => (
-							<div
-								key={`word-${index}-${wordIndex}`}
-								className="grid gap-1 rounded border border-gray-100 p-2 sm:grid-cols-4"
-							>
-								<input
-									type="text"
-									className="rounded border border-gray-300 px-1 py-1 text-xs"
-									value={word.text || ""}
-									onChange={(event) =>
-										onUpdateWord(index, wordIndex, "text", event.target.value)
-									}
-									disabled={disabled || saving}
-								/>
-								<input
-									type="number"
-									step="0.01"
-									className="rounded border border-gray-300 px-1 py-1 text-xs"
-									value={word.start ?? 0}
-									onChange={(event) =>
-										onUpdateWord(index, wordIndex, "start", Number(event.target.value))
-									}
-									disabled={disabled || saving}
-								/>
-								<input
-									type="number"
-									step="0.01"
-									className="rounded border border-gray-300 px-1 py-1 text-xs"
-									value={word.end ?? 0}
-									onChange={(event) =>
-										onUpdateWord(index, wordIndex, "end", Number(event.target.value))
-									}
-									disabled={disabled || saving}
-								/>
+				{advancedMode ? (
+					<>
+						<button
+							type="button"
+							className="text-xs text-blue-600 hover:underline"
+							onClick={() => onToggleWords(index)}
+						>
+							{expanded ? "Hide" : "Edit"} words
+						</button>
+						{expanded && (
+							<div className="mt-2 space-y-2">
+								{(segment.words || []).map((word, wordIndex) => (
+									<div
+										key={`word-${index}-${wordIndex}`}
+										className="grid gap-1 rounded border border-gray-100 p-2 sm:grid-cols-4"
+									>
+										<input
+											type="text"
+											className="rounded border border-gray-300 px-1 py-1 text-xs"
+											value={word.text || ""}
+											onChange={(event) =>
+												onUpdateWord(index, wordIndex, "text", event.target.value)
+											}
+											disabled={disabled || saving}
+										/>
+										<input
+											type="number"
+											step="0.01"
+											className="rounded border border-gray-300 px-1 py-1 text-xs"
+											value={word.start ?? 0}
+											onChange={(event) =>
+												onUpdateWord(index, wordIndex, "start", Number(event.target.value))
+											}
+											disabled={disabled || saving}
+										/>
+										<input
+											type="number"
+											step="0.01"
+											className="rounded border border-gray-300 px-1 py-1 text-xs"
+											value={word.end ?? 0}
+											onChange={(event) =>
+												onUpdateWord(index, wordIndex, "end", Number(event.target.value))
+											}
+											disabled={disabled || saving}
+										/>
+									</div>
+								))}
 							</div>
-						))}
-					</div>
+						)}
+					</>
+				) : (
+					<span className="text-xs text-gray-400">{(segment.words || []).length} words</span>
 				)}
 			</td>
 		</tr>
@@ -208,6 +215,8 @@ export default function TranscriptEditor({
 	const [transcript, setTranscript] = useState(null);
 	const [shiftSeconds, setShiftSeconds] = useState("0");
 	const [expandedSegment, setExpandedSegment] = useState(null);
+	const [advancedMode, setAdvancedMode] = useState(false);
+	const [showFullTranscript, setShowFullTranscript] = useState(false);
 	const [actionError, setActionError] = useState(null);
 
 	const loadedJobRef = useRef(null);
@@ -384,9 +393,9 @@ export default function TranscriptEditor({
 	const showInitialLoading = loading && !transcript;
 
 	return (
-		<div className="space-y-3 border-t border-gray-100 pt-4">
+		<div className="space-y-3 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
 			<div className="flex flex-wrap items-center justify-between gap-2">
-				<h3 className="text-sm font-semibold text-gray-900">Transcript Editor</h3>
+				<h3 className="text-sm font-semibold text-gray-900">Edit Lyrics</h3>
 				<span className="text-xs text-gray-500">Status: {manualStatus}</span>
 			</div>
 
@@ -410,8 +419,26 @@ export default function TranscriptEditor({
 						</div>
 					)}
 
-					{transcript && (
-						<>
+				{transcript && (
+					<>
+						<div className="flex flex-wrap items-center justify-between gap-2">
+							<button
+								type="button"
+								className="text-xs text-blue-600 hover:underline"
+								onClick={() => setShowFullTranscript((v) => !v)}
+							>
+								{showFullTranscript ? "Hide full transcript" : "Show full transcript"}
+							</button>
+							<button
+								type="button"
+								className="text-xs text-blue-600 hover:underline"
+								onClick={() => setAdvancedMode((v) => !v)}
+								disabled={disabled || saving}
+							>
+								{advancedMode ? "Exit advanced timing editor" : "Advanced timing editor"}
+							</button>
+						</div>
+						{showFullTranscript && (
 							<label className="block text-sm text-gray-700">
 								Full transcript
 								<textarea
@@ -426,6 +453,7 @@ export default function TranscriptEditor({
 									disabled={disabled || saving}
 								/>
 							</label>
+						)}
 
 							<div className="flex flex-wrap items-end gap-2">
 								<label className="text-sm text-gray-700">
@@ -457,8 +485,8 @@ export default function TranscriptEditor({
 								</button>
 							</div>
 
-							<div className="overflow-x-auto rounded-md border border-gray-200">
-								<table className="min-w-full divide-y divide-gray-200 text-sm">
+					<div className="overflow-x-auto rounded-md border border-gray-200 max-h-[420px]">
+						<table className="min-w-full divide-y divide-gray-200 text-sm">
 									<thead className="bg-gray-50">
 										<tr>
 											<th className="px-2 py-2 text-left font-medium text-gray-600">Start</th>
@@ -469,17 +497,18 @@ export default function TranscriptEditor({
 									</thead>
 									<tbody className="divide-y divide-gray-100 bg-white">
 										{(transcript.segments || []).map((segment, index) => (
-											<SegmentRow
-												key={`segment-${index}`}
-												segment={segment}
-												index={index}
-												disabled={disabled}
-												saving={saving}
-												expanded={expandedSegment === index}
-												onToggleWords={handleToggleWords}
-												onUpdateSegment={updateSegment}
-												onUpdateWord={updateWord}
-											/>
+										<SegmentRow
+											key={`segment-${index}`}
+											segment={segment}
+											index={index}
+											disabled={disabled}
+											saving={saving}
+											expanded={expandedSegment === index}
+											advancedMode={advancedMode}
+											onToggleWords={handleToggleWords}
+											onUpdateSegment={updateSegment}
+											onUpdateWord={updateWord}
+										/>
 										))}
 									</tbody>
 								</table>
@@ -523,7 +552,7 @@ export default function TranscriptEditor({
 									}}
 									className="rounded-md border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
 								>
-									Reset Manual Edits
+									Reset
 								</button>
 								<button
 									type="button"
@@ -547,40 +576,9 @@ export default function TranscriptEditor({
 									Regenerate Subtitles
 								</button>
 							</div>
-
-							{(job.has_manual_transcript ||
-								job.has_manual_transcript_srt ||
-								job.has_manual_transcript_vtt) && (
-								<div className="flex flex-wrap gap-2">
-									{job.has_manual_transcript && (
-										<button
-											type="button"
-											className="text-sm text-blue-600 hover:underline"
-											onClick={() => onDownloadManual(job.name, "json")}
-										>
-											Download manual JSON
-										</button>
-									)}
-									{(job.has_manual_transcript_srt || job.manual_transcript_srt_file) && (
-										<button
-											type="button"
-											className="text-sm text-blue-600 hover:underline"
-											onClick={() => onDownloadManual(job.name, "srt")}
-										>
-											Download manual SRT
-										</button>
-									)}
-									{(job.has_manual_transcript_vtt || job.manual_transcript_vtt_file) && (
-										<button
-											type="button"
-											className="text-sm text-blue-600 hover:underline"
-											onClick={() => onDownloadManual(job.name, "vtt")}
-										>
-											Download manual VTT
-										</button>
-									)}
-								</div>
-							)}
+							<p className="text-xs text-gray-500">
+								Download manual JSON/SRT/VTT from the Downloads tab.
+							</p>
 						</>
 					)}
 				</div>
