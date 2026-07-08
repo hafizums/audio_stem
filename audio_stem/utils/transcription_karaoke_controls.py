@@ -12,7 +12,7 @@ from audio_stem.utils.limits import get_settings
 TRANSCRIPTION_ACTIVE_STATUSES = ("Queued", "Processing")
 KARAOKE_ACTIVE_STATUSES = ("Queued", "Rendering")
 TRANSCRIPTION_STARTABLE = ("Not Started", "Failed")
-KARAOKE_STARTABLE = ("Not Started", "Failed")
+KARAOKE_STARTABLE = ("Not Started", "Failed", "Completed")
 
 
 def is_karaoke_enabled() -> bool:
@@ -92,8 +92,6 @@ def can_start_karaoke(job) -> tuple[bool, str | None]:
 		return True, None
 	if status in KARAOKE_ACTIVE_STATUSES:
 		return False, _("Karaoke rendering is already in progress.")
-	if status == "Completed":
-		return False, _("Karaoke video is already completed.")
 	if status not in KARAOKE_STARTABLE:
 		return False, _("Karaoke rendering cannot be started for this job.")
 	if (job.transcription_status or "Not Started") != "Completed":

@@ -174,6 +174,24 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 	const { call: downloadTranscriptAsset } = useFrappePostCall(
 		"audio_stem.api.separation.download_transcript_asset"
 	);
+	const { call: getTranscriptForEdit } = useFrappePostCall(
+		"audio_stem.api.separation.get_transcript_for_edit"
+	);
+	const { call: saveTranscriptCorrections } = useFrappePostCall(
+		"audio_stem.api.separation.save_transcript_corrections"
+	);
+	const { call: approveTranscriptCorrections } = useFrappePostCall(
+		"audio_stem.api.separation.approve_transcript_corrections"
+	);
+	const { call: resetManualTranscript } = useFrappePostCall(
+		"audio_stem.api.separation.reset_manual_transcript"
+	);
+	const { call: regenerateSubtitleAssets } = useFrappePostCall(
+		"audio_stem.api.separation.regenerate_subtitle_assets"
+	);
+	const { call: downloadManualTranscriptAsset } = useFrappePostCall(
+		"audio_stem.api.separation.download_manual_transcript_asset"
+	);
 
 	const displayCurrency = job?.display_currency || settings?.display_currency || "MYR";
 	const costPerSecond = settings?.cost_per_second_usd || 0;
@@ -356,13 +374,16 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 		}
 	};
 
-	const handleKaraoke = async (name) => {
+	const handleKaraoke = async (name, karaokeSourceMode = "Auto") => {
 		if (karaokeRendering) return;
 		setKaraokeRendering(true);
 		setError(null);
 		try {
 			const result = unwrapFrappeMessage(
-				await startKaraokeRender({ job_name: name })
+				await startKaraokeRender({
+					job_name: name,
+					karaoke_source_mode: karaokeSourceMode,
+				})
 			);
 			setJobName(name);
 			setJob(result);
@@ -373,6 +394,64 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 			setKaraokeRendering(false);
 		}
 	};
+
+	const handleLoadTranscript = useCallback(
+		async (name) => unwrapFrappeMessage(await getTranscriptForEdit({ job_name: name })),
+		[getTranscriptForEdit]
+	);
+
+	const handleSaveTranscript = useCallback(
+		async (name, payload) =>
+			unwrapFrappeMessage(
+				await saveTranscriptCorrections({ job_name: name, payload: JSON.stringify(payload) })
+			),
+		[saveTranscriptCorrections]
+	);
+
+	const handleApproveTranscript = useCallback(
+		async (name, payload) => {
+			await handleSaveTranscript(name, payload);
+			return unwrapFrappeMessage(await approveTranscriptCorrections({ job_name: name }));
+		},
+		[approveTranscriptCorrections, handleSaveTranscript]
+	);
+
+	const handleResetTranscript = useCallback(
+		async (name) => {
+			const result = unwrapFrappeMessage(await resetManualTranscript({ job_name: name }));
+			setJob((prev) => (prev?.name === name ? { ...prev, ...result } : prev));
+			return result;
+		},
+		[resetManualTranscript]
+	);
+
+	const handleRegenerateSubtitles = useCallback(
+		async (name) => {
+			const result = unwrapFrappeMessage(
+				await regenerateSubtitleAssets({ job_name: name, source: "manual" })
+			);
+			setJob((prev) => (prev?.name === name ? { ...prev, ...result } : prev));
+			return result;
+		},
+		[regenerateSubtitleAssets]
+	);
+
+	const handleDownloadManualTranscript = useCallback(
+		async (name, assetType) => {
+			setError(null);
+			try {
+				const result = unwrapFrappeMessage(
+					await downloadManualTranscriptAsset({ job_name: name, asset_type: assetType })
+				);
+				if (result?.file_url) {
+					window.open(result.file_url, "_blank", "noopener,noreferrer");
+				}
+			} catch (err) {
+				setError(parseFrappeError(err) || err.message || "Failed to download manual transcript");
+			}
+		},
+		[downloadManualTranscriptAsset]
+	);
 
 	const handleDownloadTranscript = async (name, assetType) => {
 		setError(null);
@@ -556,6 +635,13 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 						onTranscription={handleTranscription}
 						onKaraoke={handleKaraoke}
 						onDownloadTranscript={handleDownloadTranscript}
+						onLoadTranscript={handleLoadTranscript}
+						onSaveTranscript={handleSaveTranscript}
+						onApproveTranscript={handleApproveTranscript}
+						onResetTranscript={handleResetTranscript}
+						onRegenerateSubtitles={handleRegenerateSubtitles}
+						onDownloadManualTranscript={handleDownloadManualTranscript}
+						onJobUpdated={fetchJobDetail}
 						retrying={retrying}
 						zipping={zipping}
 						cancelling={cancelling}

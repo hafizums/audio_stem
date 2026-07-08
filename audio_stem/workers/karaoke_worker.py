@@ -1,8 +1,6 @@
 # Copyright (c) 2026, Hafiz and contributors
 # License: MIT. See LICENSE
 
-import json
-import os
 import traceback
 
 import frappe
@@ -12,7 +10,6 @@ from frappe.utils import cint, now_datetime
 from audio_stem.utils.audit_log import log_audit
 from audio_stem.utils.cancellation import should_stop_for_cancellation
 from audio_stem.utils.errors import safe_error_message
-from audio_stem.utils.files import resolve_frappe_file_path
 from audio_stem.utils.karaoke_subtitles import (
 	build_karaoke_ass_with_engine,
 	build_karaoke_words_json,
@@ -22,21 +19,7 @@ from audio_stem.utils.karaoke_subtitles import (
 	write_karaoke_json,
 )
 from audio_stem.utils.limits import get_settings
-
-
-def _load_transcript_data(job) -> dict:
-	if job.transcript_json_file:
-		path = resolve_frappe_file_path(job.transcript_json_file)
-		if path and os.path.exists(path):
-			with open(path, encoding="utf-8") as handle:
-				return json.load(handle)
-	return {
-		"text": job.transcript_text,
-		"language": job.transcription_language,
-		"duration": job.duration_seconds,
-		"segments": [],
-		"words": [],
-	}
+from audio_stem.utils.transcript_corrections import load_karaoke_transcript_data
 
 
 def process_karaoke_render(name: str, template: str | None = None):
@@ -65,7 +48,7 @@ def process_karaoke_render(name: str, template: str | None = None):
 	video_generated = False
 
 	try:
-		transcript_data = _load_transcript_data(job)
+		transcript_data = load_karaoke_transcript_data(job)
 		karaoke_data = build_karaoke_words_json(job, transcript_data)
 		write_karaoke_json(job, karaoke_data)
 		job.save(ignore_permissions=True)

@@ -24,37 +24,6 @@ from audio_stem.workers.separation_worker import process_audio_separation
 
 
 class TestAudioSeparation(AudioStemTestCase):
-	def _create_job(self, with_file: bool = True):
-		job = frappe.get_doc(
-			{
-				"doctype": "Audio Separation Job",
-				"user": frappe.session.user,
-				"status": "Draft",
-			}
-		)
-		if with_file:
-			job.original_file = self._attach_test_file()
-			job.duration_seconds = 30
-		job.insert(ignore_permissions=True)
-		return job
-
-	def _attach_test_file(self):
-		with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
-			tmp.write(b"fake-audio-content")
-			tmp_path = tmp.name
-
-		file_doc = frappe.get_doc(
-			{
-				"doctype": "File",
-				"file_name": os.path.basename(tmp_path),
-				"is_private": 1,
-				"content": open(tmp_path, "rb").read(),
-			}
-		)
-		file_doc.save(ignore_permissions=True)
-		os.unlink(tmp_path)
-		return file_doc.file_url
-
 	def test_cannot_start_without_original_file(self):
 		job = self._create_job(with_file=False)
 		with self.assertRaises(frappe.ValidationError):
@@ -97,7 +66,8 @@ class TestAudioSeparation(AudioStemTestCase):
 
 	def test_worker_completes_with_mocked_wavespeed(self):
 		job = self._create_job()
-		start_separation(job.name)
+		with patch("audio_stem.api.separation.frappe.enqueue"):
+			start_separation(job.name)
 
 		vocal_url = "https://example.com/vocal.mp3"
 		instrumental_url = "https://example.com/instrumental.mp3"

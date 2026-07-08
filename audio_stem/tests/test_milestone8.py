@@ -70,49 +70,6 @@ class TestAudioSeparationMilestone8(AudioStemTestCase):
 		settings.karaoke_style_preset = "default_1080p"
 		settings.save(ignore_permissions=True)
 
-	def _create_file(self):
-		with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
-			tmp.write(b"audio")
-			tmp_path = tmp.name
-		file_doc = frappe.get_doc(
-			{
-				"doctype": "File",
-				"file_name": os.path.basename(tmp_path),
-				"is_private": 1,
-				"content": open(tmp_path, "rb").read(),
-			}
-		)
-		file_doc.save(ignore_permissions=True)
-		os.unlink(tmp_path)
-		return file_doc
-
-	def _create_completed_job(self, user=None):
-		job = frappe.get_doc(
-			{
-				"doctype": "Audio Separation Job",
-				"user": user or frappe.session.user,
-				"status": "Completed",
-				"original_file": self._create_file().file_url,
-				"vocal_file": self._create_file().file_url,
-				"instrumental_file": self._create_file().file_url,
-				"duration_seconds": 30,
-			}
-		)
-		job.insert(ignore_permissions=True)
-		return job
-
-	def _ensure_user(self, email: str):
-		if not frappe.db.exists("User", email):
-			frappe.get_doc(
-				{
-					"doctype": "User",
-					"email": email,
-					"first_name": email.split("@")[0],
-					"send_welcome_email": 0,
-				}
-			).insert(ignore_permissions=True)
-		return email
-
 	def test_checklist_does_not_expose_openai_api_key(self):
 		self._enable_openai()
 		items = get_configuration_checklist_data()

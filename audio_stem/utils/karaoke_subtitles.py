@@ -15,6 +15,8 @@ from audio_stem.utils.ffmpeg_media import (
 	create_color_video_with_audio,
 	ensure_ffmpeg_available,
 	is_ffprobe_available,
+	prepare_video_background_with_audio,
+	probe_media_duration,
 )
 from audio_stem.utils.files import is_external_file_url, resolve_frappe_file_path
 from audio_stem.utils.limits import get_settings
@@ -89,15 +91,14 @@ def get_karaoke_style(preset: str | None = None):
 
 
 def resolve_transcript_json_for_karaoke(job) -> str:
-	if not job.transcript_json_file:
-		frappe.throw(
-			_("Transcript JSON is required for karaoke subtitle generation."),
-			frappe.ValidationError,
-		)
-	path = resolve_frappe_file_path(job.transcript_json_file)
-	if not path or not os.path.exists(path):
-		frappe.throw(_("Could not resolve transcript JSON for karaoke."), frappe.ValidationError)
-	return path
+	"""Return a filesystem path to karaoke-ready transcript JSON."""
+	from audio_stem.utils.transcript_corrections import load_karaoke_transcript_data
+
+	prepared = load_karaoke_transcript_data(job)
+	transcript_path = tempfile.mktemp(suffix=".json")
+	with open(transcript_path, "w", encoding="utf-8") as handle:
+		json.dump(prepared, handle, indent=2)
+	return transcript_path
 
 
 def resolve_karaoke_audio_path(job) -> str:
@@ -129,14 +130,60 @@ def resolve_karaoke_audio_path(job) -> str:
 	frappe.throw(_("No audio source is available for karaoke video generation."), frappe.ValidationError)
 
 
+def resolve_karaoke_background_video_path(job) -> str | None:
+	"""Resolve uploaded job background video, then site default, else None."""
+	candidates = []
+	if job.get("karaoke_background_video_file"):
+		candidates.append(job.karaoke_background_video_file)
+
+	settings = get_settings()
+	if settings.get("default_karaoke_background_video"):
+		candidates.append(settings.default_karaoke_background_video)
+
+	for file_url in candidates:
+		if not file_url:
+			continue
+		if is_external_file_url(file_url):
+			response = requests.get(file_url, timeout=120)
+			response.raise_for_status()
+			tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+			tmp.write(response.content)
+			tmp.close()
+			return tmp.name
+		path = resolve_frappe_file_path(file_url)
+		if path and os.path.exists(path):
+			return path
+	return None
+
+
+def _resolve_karaoke_duration_seconds(job, audio_path: str) -> float:
+	duration = probe_media_duration(audio_path)
+	if duration and duration > 0:
+		return flt(duration)
+	return flt(job.duration_seconds or 30)
+
+
 def create_background_video_for_karaoke(job, background_color: str | None = None) -> str:
 	settings = get_settings()
 	audio_path = resolve_karaoke_audio_path(job)
-	duration = flt(job.duration_seconds or 30)
+	duration = _resolve_karaoke_duration_seconds(job, audio_path)
 	width = cint(settings.karaoke_video_width) or 1080
 	height = cint(settings.karaoke_video_height) or 1920
-	color = background_color or settings.karaoke_background_color or "#111111"
 	output_path = tempfile.mktemp(suffix=".mp4")
+
+	background_video_path = resolve_karaoke_background_video_path(job)
+	if background_video_path:
+		prepare_video_background_with_audio(
+			video_path=background_video_path,
+			audio_path=audio_path,
+			output_path=output_path,
+			duration_seconds=duration,
+			width=width,
+			height=height,
+		)
+		return output_path
+
+	color = background_color or settings.karaoke_background_color or "#111111"
 	create_color_video_with_audio(
 		output_path=output_path,
 		duration_seconds=duration,
@@ -248,7 +295,11 @@ def _segment_options_from_settings():
 	from karaoke_engine import SegmentOptions
 
 	settings = get_settings()
-	return SegmentOptions(max_words_per_line=cint(settings.karaoke_max_words_per_line) or 5)
+	return SegmentOptions(
+		max_words_per_line=cint(settings.subtitle_max_words_per_line)
+		or cint(settings.karaoke_max_words_per_line)
+		or 5
+	)
 
 
 def _render_options_from_settings():
@@ -283,17 +334,27 @@ def build_karaoke_ass_with_engine(job, *, style_preset: str | None = None) -> st
 	height = cint(settings.karaoke_video_height) or 1920
 
 	engine = KaraokeEngine()
-	engine.create_ass(
-		transcript_path=transcript_path,
-		output_path=ass_path,
-		style=style,
-		segment_options=_segment_options_from_settings(),
-		play_res_x=width,
-		play_res_y=height,
-		title=f"Karaoke {job.name}",
-	)
+	try:
+		engine.create_ass(
+			transcript_path=transcript_path,
+			output_path=ass_path,
+			style=style,
+			segment_options=_segment_options_from_settings(),
+			play_res_x=width,
+			play_res_y=height,
+			title=f"Karaoke {job.name}",
+		)
+	finally:
+		try:
+			if transcript_path and os.path.exists(transcript_path):
+				os.unlink(transcript_path)
+		except OSError:
+			pass
 
-	job.karaoke_source_transcript_file = job.transcript_json_file
+	job.karaoke_source_transcript_file = None
+	from audio_stem.utils.transcript_corrections import resolve_karaoke_transcript_file_url
+
+	source_file_url = resolve_karaoke_transcript_file_url(job)
 	file_url = _attach_private_binary_file(
 		job,
 		file_name=f"{job.name}-karaoke.ass",
@@ -301,6 +362,7 @@ def build_karaoke_ass_with_engine(job, *, style_preset: str | None = None) -> st
 		fieldname="karaoke_ass_file",
 	)
 	job.karaoke_ass_file = file_url
+	job.karaoke_source_transcript_file = source_file_url
 	job.karaoke_engine_version = get_karaoke_engine_version()
 
 	try:
@@ -383,7 +445,7 @@ def render_karaoke_video_with_engine(job, *, style_preset: str | None = None, in
 
 		return file_url
 	finally:
-		for path in (ass_path, output_path):
+		for path in (ass_path, output_path, transcript_path):
 			try:
 				if path and os.path.exists(path):
 					os.unlink(path)

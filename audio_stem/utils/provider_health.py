@@ -49,6 +49,32 @@ def _karaoke_ass_video_counts(jobs) -> dict:
 	}
 
 
+def _manual_correction_counts(jobs) -> dict:
+	jobs_with_manual = 0
+	approved_manual = 0
+	ass_from_manual = 0
+	manual_failures = 0
+
+	for row in jobs:
+		if row.get("manual_transcript_json_file"):
+			jobs_with_manual += 1
+		if (row.get("manual_transcript_status") or "") == "Approved":
+			approved_manual += 1
+		if row.get("karaoke_ass_file") and row.get("karaoke_source_transcript_file"):
+			if row.karaoke_source_transcript_file == row.get("manual_transcript_json_file"):
+				ass_from_manual += 1
+		if (row.get("manual_transcript_status") or "") == "Saved" and row.get("transcription_status") == "Completed":
+			if not row.get("manual_transcript_json_file"):
+				manual_failures += 1
+
+	return {
+		"manual_correction_jobs_count": jobs_with_manual,
+		"approved_manual_transcript_count": approved_manual,
+		"karaoke_ass_from_manual_count": ass_from_manual,
+		"manual_correction_failure_count": manual_failures,
+	}
+
+
 def get_provider_health_summary() -> dict:
 	since = add_to_date(now_datetime(), hours=-24)
 	jobs = frappe.get_all(
@@ -65,6 +91,10 @@ def get_provider_health_summary() -> dict:
 			"karaoke_ass_file",
 			"karaoke_video_file",
 			"karaoke_error",
+			"karaoke_source_transcript_file",
+			"manual_transcript_status",
+			"manual_transcript_json_file",
+			"transcript_json_file",
 		],
 		ignore_permissions=True,
 	)
@@ -85,6 +115,7 @@ def get_provider_health_summary() -> dict:
 		"karaoke_video_completed_count": karaoke_detail["video_completed"],
 		"karaoke_video_failed_count": karaoke_detail["video_failed"],
 	}
+	manual_correction = _manual_correction_counts(jobs)
 
 	if not terminal:
 		return {
@@ -99,6 +130,7 @@ def get_provider_health_summary() -> dict:
 			"transcription_completed_count": transcription["completed"],
 			"transcription_failed_count": transcription["failed"],
 			**base_karaoke_fields,
+			**manual_correction,
 		}
 
 	success_rate = flt(len(completed)) / flt(len(terminal))
@@ -142,4 +174,5 @@ def get_provider_health_summary() -> dict:
 		"transcription_completed_count": transcription["completed"],
 		"transcription_failed_count": transcription["failed"],
 		**base_karaoke_fields,
+		**manual_correction,
 	}

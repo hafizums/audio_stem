@@ -1,6 +1,7 @@
 # Copyright (c) 2026, Hafiz and contributors
 # License: MIT. See LICENSE
 
+import json
 import os
 import shutil
 import subprocess
@@ -48,6 +49,125 @@ def _run_ffmpeg(args: list[str], *, error_title: str = "ffmpeg failed"):
 	if result.returncode != 0:
 		frappe.log_error(title=error_title, message=result.stderr or result.stdout or "ffmpeg error")
 		frappe.throw(_("Media processing failed. Please contact an administrator."), frappe.ValidationError)
+
+
+def probe_media_duration(path: str) -> float | None:
+	"""Return media duration in seconds using ffprobe, or None when unavailable."""
+	if not path or not os.path.isfile(path):
+		return None
+	if not is_ffprobe_available():
+		return None
+
+	try:
+		result = subprocess.run(
+			[
+				"ffprobe",
+				"-v",
+				"error",
+				"-show_entries",
+				"format=duration",
+				"-of",
+				"json",
+				path,
+			],
+			capture_output=True,
+			text=True,
+			check=False,
+		)
+	except OSError:
+		return None
+
+	if result.returncode != 0:
+		return None
+
+	try:
+		payload = json.loads(result.stdout or "{}")
+	except json.JSONDecodeError:
+		return None
+
+	format_section = payload.get("format")
+	if not isinstance(format_section, dict):
+		return None
+
+	duration_value = format_section.get("duration")
+	if duration_value is None:
+		return None
+
+	try:
+		return float(duration_value)
+	except (TypeError, ValueError):
+		return None
+
+
+def build_prepare_video_background_ffmpeg_args(
+	*,
+	video_path: str,
+	audio_path: str,
+	output_path: str,
+	duration_seconds: float,
+	width: int,
+	height: int,
+	loop_video: bool = True,
+) -> list[str]:
+	"""Build ffmpeg args to scale/crop a background video and mux karaoke audio."""
+	duration = max(float(duration_seconds), 0.1)
+	video_filter = (
+		f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+		f"crop={width}:{height}"
+	)
+	args: list[str] = []
+	if loop_video:
+		args.extend(["-stream_loop", "-1"])
+	args.extend(
+		[
+			"-i",
+			video_path,
+			"-i",
+			audio_path,
+			"-t",
+			str(duration),
+			"-vf",
+			video_filter,
+			"-map",
+			"0:v:0",
+			"-map",
+			"1:a:0",
+			"-c:v",
+			"libx264",
+			"-pix_fmt",
+			"yuv420p",
+			"-c:a",
+			"aac",
+			output_path,
+		]
+	)
+	return args
+
+
+def prepare_video_background_with_audio(
+	*,
+	video_path: str,
+	audio_path: str,
+	output_path: str,
+	duration_seconds: float,
+	width: int,
+	height: int,
+	loop_video: bool = True,
+):
+	"""Loop/trim, scale/crop background video and mux karaoke audio (video audio ignored)."""
+	_run_ffmpeg(
+		build_prepare_video_background_ffmpeg_args(
+			video_path=video_path,
+			audio_path=audio_path,
+			output_path=output_path,
+			duration_seconds=duration_seconds,
+			width=width,
+			height=height,
+			loop_video=loop_video,
+		),
+		error_title="ffmpeg karaoke background video preparation failed",
+	)
+	return output_path
 
 
 def transcode_audio_mono_mp3(input_path: str, *, bitrate: str = "64k") -> str:

@@ -252,14 +252,35 @@ bench restart
 
 ### Run tests
 
-Use a **dedicated test site** when possible. The test suite temporarily changes **Audio Separation Settings** on whichever site you target. Running against your main dev site (`jomveo`) can overwrite values such as the WaveSpeed API key, pilot allowlists, and limits.
+Use a **dedicated test site** when possible. **Do not run tests on `jomveo`** (or any site with manual/production settings and real user jobs) unless you understand that tests temporarily apply defaults during each case — settings are snapshotted and restored, and only tagged test data is cleaned up.
+
+#### Recommended test site setup
 
 ```bash
-# Recommended: separate site for tests
-bench new-site test.localhost --admin-password admin
-bench --site test.localhost install-app audio_stem
-bench --site test.localhost run-tests --app audio_stem
+cd /home/hafiz/frappe-bench
+
+bench new-site audio-stem-test.local --admin-password admin
+bench --site audio-stem-test.local install-app credit_management
+bench --site audio-stem-test.local install-app audio_stem
+
+bench --site audio-stem-test.local run-tests --app audio_stem
 ```
+
+#### Safe testing guarantees
+
+- Each test **snapshots** `Audio Separation Settings` before making changes and **restores** the exact prior values in `tearDown`.
+- Tests create jobs/files tagged with `TEST_AUDIO_STEM` or `test_audio_stem_*` filenames.
+- `cleanup_audio_stem_test_data()` runs in `setUp` and `tearDown` and deletes **only** clearly tagged test records.
+- Non-test jobs (no marker, non-test filename) are **never** deleted by cleanup.
+- Use `temporary_audio_settings(...)` when you need short-lived setting overrides inside a single test block.
+
+#### If you must use an existing site (e.g. `jomveo`)
+
+```bash
+bench --site jomveo run-tests --app audio_stem
+```
+
+Settings are restored after each test, but prefer a dedicated test site to avoid any risk to manual configuration or real user data.
 
 ```bash
 bench --site <your-site> run-tests --app audio_stem
@@ -561,6 +582,89 @@ bench --site <your-site> run-tests --app audio_stem
 11. Disable video render and confirm ASS generation still works without ffmpeg.
 12. Run the full test suite.
 
+## Milestone 8.2 — Manual transcript correction
+
+Whisper lyrics timing is often imperfect for music. Milestone 8.2 adds a manual correction workflow **before** ASS/MP4 karaoke rendering. Original Whisper assets are never overwritten.
+
+### Why manual correction exists
+
+- Fix misheard lyrics before karaoke burn-in
+- Adjust word/segment timestamps for musical phrasing
+- Approve a corrected transcript as the karaoke source
+
+### Original vs manual transcript
+
+| Asset | Field prefix | Mutable |
+| --- | --- | --- |
+| Whisper (original) | `transcript_*` | No — preserved after transcription |
+| Manual corrected | `manual_transcript_*` | Yes — via Transcript Editor |
+
+### Job fields
+
+- `manual_transcript_status`: Not Started / Draft / Saved / Approved
+- `manual_transcript_json_file`, `manual_transcript_srt_file`, `manual_transcript_vtt_file`
+- `karaoke_use_manual_transcript` (default on)
+- `karaoke_source_mode`: Auto / Original Whisper / Manual Corrected
+
+### Settings (subtitle line grouping)
+
+| Field | Default | Purpose |
+| --- | --- | --- |
+| `subtitle_max_words_per_line` | 5 | Line breaking for manual SRT/VTT and ASS |
+| `subtitle_max_line_duration_seconds` | 4.0 | Max line duration guidance |
+| `subtitle_min_word_duration_seconds` | 0.08 | Minimum word duration validation |
+| `subtitle_snap_overlaps` | 1 | Snap minor word overlaps on save |
+
+### Workflow
+
+```text
+Whisper transcript
+→ manual correction draft (Transcript Editor)
+→ save manual JSON/SRT/VTT
+→ approve manual transcript
+→ karaoke_engine ASS (source: Auto / Manual / Original)
+→ optional FFmpeg MP4
+```
+
+### APIs
+
+- `get_transcript_for_edit(job_name)`
+- `save_transcript_corrections(job_name, payload)`
+- `approve_transcript_corrections(job_name)`
+- `reset_manual_transcript(job_name)` — clears manual fields only
+- `regenerate_subtitle_assets(job_name, source="manual")` — `manual` or `whisper`
+- `download_manual_transcript_asset(job_name, asset_type)` — `json`, `srt`, `vtt`
+- `start_karaoke_render(job_name, template=None, karaoke_source_mode=None)`
+
+### Karaoke source modes
+
+- **Auto** — approved manual transcript when `karaoke_use_manual_transcript` is enabled; otherwise Whisper
+- **Original Whisper** — always uses `transcript_json_file`
+- **Manual Corrected** — requires `manual_transcript_json_file`
+
+### Manual test (Milestone 8.2)
+
+1. Deploy and migrate.
+2. Complete separation and Whisper transcription.
+3. Open `/audio-vocal-remover` → Job Detail → **Transcript Editor**.
+4. Edit a lyric line and adjust a timestamp.
+5. **Save Draft** → download manual SRT/VTT.
+6. **Approve** manual transcript.
+7. Generate karaoke with **Auto** — confirm source shows Manual Corrected.
+8. Generate karaoke with **Original Whisper** — confirm Whisper files unchanged.
+9. **Reset Manual Edits** — confirm Whisper transcript still exists.
+10. Run all tests.
+
+### Troubleshooting (Milestone 8.2)
+
+| Issue | Cause | Fix |
+| --- | --- | --- |
+| Transcript Editor disabled | Karaoke render active | Wait for karaoke to finish |
+| Approve blocked | Validation errors | Fix timestamps/text in editor |
+| Manual Corrected karaoke fails | No manual JSON saved | Save corrections first |
+| Auto still uses Whisper | Manual not approved | Approve manual transcript |
+| Shift timings rejected | Negative resulting times | Use smaller negative shift |
+
 ### Troubleshooting (Milestone 8 / 8.1)
 
 | Symptom | Likely cause | What to check |
@@ -578,17 +682,10 @@ bench --site <your-site> run-tests --app audio_stem
 
 ### Run tests
 
-Use a **dedicated test site** when possible. The test suite temporarily changes **Audio Separation Settings** on whichever site you target. Running against your main dev site (`jomveo`) can overwrite values such as the WaveSpeed API key, pilot allowlists, and limits.
+See the **Run tests** section near the top of this README for the recommended `audio-stem-test.local` workflow, settings snapshot/restore behavior, and cleanup guarantees.
 
 ```bash
-# Recommended: separate site for tests
-bench new-site test.localhost --admin-password admin
-bench --site test.localhost install-app audio_stem
-bench --site test.localhost run-tests --app audio_stem
-```
-
-```bash
-bench --site <your-site> run-tests --app audio_stem
+bench --site audio-stem-test.local run-tests --app audio_stem
 ```
 
 #### License

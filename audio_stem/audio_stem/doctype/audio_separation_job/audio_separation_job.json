@@ -49,11 +49,24 @@
   "transcription_started_at",
   "transcription_completed_at",
   "transcription_cost_usd",
+  "section_break_manual_transcript",
+  "manual_transcript_status",
+  "manual_transcript_text",
+  "manual_transcript_json_file",
+  "manual_transcript_srt_file",
+  "manual_transcript_vtt_file",
+  "manual_transcript_updated_at",
+  "manual_transcript_updated_by",
+  "manual_transcript_approved_at",
+  "manual_transcript_approved_by",
   "section_break_karaoke",
   "karaoke_status",
+  "karaoke_use_manual_transcript",
+  "karaoke_source_mode",
   "karaoke_template",
   "karaoke_ass_file",
   "karaoke_video_file",
+  "karaoke_background_video_file",
   "karaoke_subtitle_json_file",
   "karaoke_render_source_video_file",
   "karaoke_source_transcript_file",
@@ -334,6 +347,69 @@
    "read_only": 1
   },
   {
+   "fieldname": "section_break_manual_transcript",
+   "fieldtype": "Section Break",
+   "label": "Manual Transcript"
+  },
+  {
+   "default": "Not Started",
+   "fieldname": "manual_transcript_status",
+   "fieldtype": "Select",
+   "label": "Manual Transcript Status",
+   "options": "Not Started\nDraft\nSaved\nApproved",
+   "read_only": 1
+  },
+  {
+   "fieldname": "manual_transcript_text",
+   "fieldtype": "Long Text",
+   "label": "Manual Transcript Text",
+   "read_only": 1
+  },
+  {
+   "fieldname": "manual_transcript_json_file",
+   "fieldtype": "Attach",
+   "label": "Manual Transcript JSON File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "manual_transcript_srt_file",
+   "fieldtype": "Attach",
+   "label": "Manual Transcript SRT File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "manual_transcript_vtt_file",
+   "fieldtype": "Attach",
+   "label": "Manual Transcript VTT File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "manual_transcript_updated_at",
+   "fieldtype": "Datetime",
+   "label": "Manual Transcript Updated At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "manual_transcript_updated_by",
+   "fieldtype": "Link",
+   "label": "Manual Transcript Updated By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "manual_transcript_approved_at",
+   "fieldtype": "Datetime",
+   "label": "Manual Transcript Approved At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "manual_transcript_approved_by",
+   "fieldtype": "Link",
+   "label": "Manual Transcript Approved By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
    "fieldname": "section_break_karaoke",
    "fieldtype": "Section Break",
    "label": "Karaoke"
@@ -353,6 +429,19 @@
    "read_only": 1
   },
   {
+   "default": "1",
+   "fieldname": "karaoke_use_manual_transcript",
+   "fieldtype": "Check",
+   "label": "Karaoke Use Manual Transcript"
+  },
+  {
+   "default": "Auto",
+   "fieldname": "karaoke_source_mode",
+   "fieldtype": "Select",
+   "label": "Karaoke Source Mode",
+   "options": "Auto\nOriginal Whisper\nManual Corrected"
+  },
+  {
    "fieldname": "karaoke_ass_file",
    "fieldtype": "Attach",
    "label": "Karaoke ASS File",
@@ -363,6 +452,11 @@
    "fieldtype": "Attach",
    "label": "Karaoke Video File",
    "read_only": 1
+  },
+  {
+   "fieldname": "karaoke_background_video_file",
+   "fieldtype": "Attach",
+   "label": "Karaoke Background Video File"
   },
   {
    "fieldname": "karaoke_subtitle_json_file",

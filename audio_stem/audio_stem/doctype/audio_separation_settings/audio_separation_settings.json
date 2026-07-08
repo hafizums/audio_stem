@@ -42,6 +42,10 @@
   "transcription_cost_per_minute_usd",
   "default_transcription_language",
   "enable_word_timestamps",
+  "subtitle_max_words_per_line",
+  "subtitle_max_line_duration_seconds",
+  "subtitle_min_word_duration_seconds",
+  "subtitle_snap_overlaps",
   "charge_credits_for_transcription",
   "section_break_karaoke",
   "karaoke_enabled",
@@ -52,6 +56,7 @@
   "karaoke_video_width",
   "karaoke_video_height",
   "karaoke_background_color",
+  "default_karaoke_background_video",
   "karaoke_include_instrumental_audio",
   "karaoke_ffmpeg_preset",
   "karaoke_ffmpeg_crf",
@@ -289,6 +294,33 @@
    "label": "Enable Word Timestamps"
   },
   {
+   "default": "5",
+   "fieldname": "subtitle_max_words_per_line",
+   "fieldtype": "Int",
+   "label": "Subtitle Max Words Per Line",
+   "non_negative": 1
+  },
+  {
+   "default": "4.0",
+   "fieldname": "subtitle_max_line_duration_seconds",
+   "fieldtype": "Float",
+   "label": "Subtitle Max Line Duration (seconds)",
+   "non_negative": 1
+  },
+  {
+   "default": "0.08",
+   "fieldname": "subtitle_min_word_duration_seconds",
+   "fieldtype": "Float",
+   "label": "Subtitle Min Word Duration (seconds)",
+   "non_negative": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "subtitle_snap_overlaps",
+   "fieldtype": "Check",
+   "label": "Subtitle Snap Overlaps"
+  },
+  {
    "default": "0",
    "fieldname": "charge_credits_for_transcription",
    "fieldtype": "Check",
@@ -349,6 +381,11 @@
    "fieldname": "karaoke_background_color",
    "fieldtype": "Data",
    "label": "Karaoke Background Color"
+  },
+  {
+   "fieldname": "default_karaoke_background_video",
+   "fieldtype": "Attach",
+   "label": "Default Karaoke Background Video"
   },
   {
    "default": "1",

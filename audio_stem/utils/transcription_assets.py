@@ -118,7 +118,13 @@ def _format_vtt_timestamp(seconds: float) -> str:
 	return f"{hours:02d}:{minutes:02d}:{secs:02d}.{millis:03d}"
 
 
-def write_srt_from_segments_or_words(job, transcript_data: dict) -> str:
+def write_srt_from_segments_or_words(
+	job,
+	transcript_data: dict,
+	*,
+	fieldname: str = "transcript_srt_file",
+	file_name: str | None = None,
+) -> str:
 	lines = []
 	words = transcript_data.get("words") or []
 	segments = transcript_data.get("segments") or []
@@ -155,15 +161,21 @@ def write_srt_from_segments_or_words(job, transcript_data: dict) -> str:
 	content = "\n".join(lines).strip() + "\n"
 	file_url = _attach_private_file(
 		job,
-		file_name=f"{job.name}-transcript.srt",
+		file_name=file_name or f"{job.name}-transcript.srt",
 		content=content,
-		fieldname="transcript_srt_file",
+		fieldname=fieldname,
 	)
-	job.transcript_srt_file = file_url
+	job.set(fieldname, file_url)
 	return file_url
 
 
-def write_vtt_from_segments_or_words(job, transcript_data: dict) -> str:
+def write_vtt_from_segments_or_words(
+	job,
+	transcript_data: dict,
+	*,
+	fieldname: str = "transcript_vtt_file",
+	file_name: str | None = None,
+) -> str:
 	lines = ["WEBVTT", ""]
 	words = transcript_data.get("words") or []
 	segments = transcript_data.get("segments") or []
@@ -196,11 +208,11 @@ def write_vtt_from_segments_or_words(job, transcript_data: dict) -> str:
 	content = "\n".join(lines).strip() + "\n"
 	file_url = _attach_private_file(
 		job,
-		file_name=f"{job.name}-transcript.vtt",
+		file_name=file_name or f"{job.name}-transcript.vtt",
 		content=content,
-		fieldname="transcript_vtt_file",
+		fieldname=fieldname,
 	)
-	job.transcript_vtt_file = file_url
+	job.set(fieldname, file_url)
 	return file_url
 
 

@@ -40,6 +40,13 @@ ALLOWED_AUDIO_MIMETYPES = {
 	"audio/aac",
 	"audio/x-aac",
 }
+ALLOWED_VIDEO_EXTENSIONS = (".mp4", ".webm", ".mov", ".m4v")
+ALLOWED_VIDEO_MIMETYPES = {
+	"video/mp4",
+	"video/webm",
+	"video/quicktime",
+	"video/x-m4v",
+}
 
 
 def _get_display_currency() -> str:
@@ -277,6 +284,37 @@ def _job_detail_payload(job):
 	}
 
 
+def _karaoke_transcript_source_label(job) -> str:
+	from audio_stem.utils.transcript_corrections import resolve_karaoke_transcript_label
+
+	try:
+		return resolve_karaoke_transcript_label(job)
+	except Exception:
+		return "Original Whisper"
+
+
+def _karaoke_rendered_transcript_source_label(job) -> str | None:
+	from audio_stem.utils.transcript_corrections import resolve_karaoke_rendered_transcript_label
+
+	try:
+		return resolve_karaoke_rendered_transcript_label(job)
+	except Exception:
+		return None
+
+
+def _can_edit_transcript(job) -> bool:
+	from audio_stem.utils.transcription_karaoke_controls import KARAOKE_ACTIVE_STATUSES, karaoke_queue_is_stale
+
+	if (job.transcription_status or "Not Started") != "Completed":
+		return False
+	if not job.transcript_json_file:
+		return False
+	karaoke_status = job.karaoke_status or "Not Started"
+	if karaoke_status in KARAOKE_ACTIVE_STATUSES and not karaoke_queue_is_stale(job):
+		return False
+	return True
+
+
 def _transcription_karaoke_payload(job):
 	from audio_stem.utils.transcription_karaoke_controls import (
 		can_start_karaoke,
@@ -309,6 +347,7 @@ def _transcription_karaoke_payload(job):
 		"karaoke_style_preset": job.get("karaoke_template") or settings.karaoke_style_preset or "default_1080p",
 		"karaoke_ass_file": job.get("karaoke_ass_file"),
 		"karaoke_video_file": job.get("karaoke_video_file"),
+		"karaoke_background_video_file": job.get("karaoke_background_video_file"),
 		"karaoke_subtitle_json_file": job.get("karaoke_subtitle_json_file"),
 		"karaoke_engine_version": job.get("karaoke_engine_version"),
 		"karaoke_error": job.get("karaoke_error"),
@@ -325,6 +364,7 @@ def _transcription_karaoke_payload(job):
 		"has_transcript_vtt": bool(job.get("transcript_vtt_file")),
 		"has_karaoke_ass": bool(job.get("karaoke_ass_file")),
 		"has_karaoke_video": bool(job.get("karaoke_video_file")),
+		"has_karaoke_background_video": bool(job.get("karaoke_background_video_file")),
 		"is_transcription_active": (
 			job.get("transcription_status") in ("Queued", "Processing")
 			and not transcription_queue_is_stale(job)
@@ -333,7 +373,24 @@ def _transcription_karaoke_payload(job):
 			job.get("karaoke_status") in ("Queued", "Rendering") and not karaoke_queue_is_stale(job)
 		),
 		"karaoke_style_preset_default": settings.karaoke_style_preset or "default_1080p",
+		"has_default_karaoke_background_video": bool(settings.get("default_karaoke_background_video")),
 		"default_transcription_language": settings.default_transcription_language,
+		"manual_transcript_status": job.get("manual_transcript_status") or "Not Started",
+		"manual_transcript_text": job.get("manual_transcript_text"),
+		"manual_transcript_json_file": job.get("manual_transcript_json_file"),
+		"manual_transcript_srt_file": job.get("manual_transcript_srt_file"),
+		"manual_transcript_vtt_file": job.get("manual_transcript_vtt_file"),
+		"manual_transcript_updated_at": job.get("manual_transcript_updated_at"),
+		"manual_transcript_approved_at": job.get("manual_transcript_approved_at"),
+		"has_manual_transcript": bool(job.get("manual_transcript_json_file")),
+		"has_manual_transcript_srt": bool(job.get("manual_transcript_srt_file")),
+		"has_manual_transcript_vtt": bool(job.get("manual_transcript_vtt_file")),
+		"manual_transcript_is_approved": (job.get("manual_transcript_status") or "Not Started") == "Approved",
+		"karaoke_use_manual_transcript": bool(cint(job.get("karaoke_use_manual_transcript"))),
+		"karaoke_source_mode": job.get("karaoke_source_mode") or "Auto",
+		"karaoke_transcript_source_label": _karaoke_transcript_source_label(job),
+		"karaoke_rendered_transcript_source_label": _karaoke_rendered_transcript_source_label(job),
+		"can_edit_transcript": _can_edit_transcript(job),
 	}
 
 
@@ -354,6 +411,49 @@ def _validate_audio_upload(filename: str, content_type: str | None = None):
 		return
 
 	frappe.throw(_("Please upload a supported audio file (MP3, WAV, M4A, FLAC, OGG, AAC)."))
+
+
+def _validate_video_upload(filename: str, content_type: str | None = None):
+	ext = os.path.splitext(filename or "")[1].lower()
+	mime = (content_type or guess_type(filename)[0] or "").lower()
+
+	if ext in ALLOWED_VIDEO_EXTENSIONS:
+		return
+	if mime in ALLOWED_VIDEO_MIMETYPES:
+		return
+
+	frappe.throw(_("Please upload a supported video file (MP4, WEBM, MOV)."))
+
+
+def _save_uploaded_video(upload, *, attached_to_doctype: str | None = None, attached_to_name: str | None = None, attached_to_field: str | None = None) -> dict:
+	settings = get_settings()
+	ensure_enabled(settings)
+
+	filename = upload.filename
+	if not filename:
+		frappe.throw(_("No file uploaded"))
+
+	content = upload.stream.read()
+	_validate_video_upload(filename, upload.content_type)
+
+	file_doc = frappe.get_doc(
+		{
+			"doctype": "File",
+			"file_name": filename,
+			"is_private": 1,
+			"content": content,
+			"attached_to_doctype": attached_to_doctype,
+			"attached_to_name": attached_to_name,
+			"attached_to_field": attached_to_field,
+		}
+	)
+	file_doc.save(ignore_permissions=True)
+	validate_file_size(file_doc, settings)
+
+	return {
+		"file_url": file_doc.file_url,
+		"file_name": file_doc.file_name,
+	}
 
 
 def _save_uploaded_audio(upload) -> dict:
@@ -486,6 +586,11 @@ def get_page_settings():
 		"karaoke_ass_enabled": bool(cint(get_settings().karaoke_ass_enabled)),
 		"karaoke_video_render_enabled": bool(cint(get_settings().karaoke_video_render_enabled)),
 		"karaoke_style_preset": get_settings().karaoke_style_preset or "default_1080p",
+		"has_default_karaoke_background_video": bool(get_settings().default_karaoke_background_video),
+		"subtitle_max_words_per_line": cint(get_settings().subtitle_max_words_per_line) or 5,
+		"subtitle_max_line_duration_seconds": flt(get_settings().subtitle_max_line_duration_seconds) or 4.0,
+		"subtitle_min_word_duration_seconds": flt(get_settings().subtitle_min_word_duration_seconds) or 0.08,
+		"subtitle_snap_overlaps": bool(cint(get_settings().subtitle_snap_overlaps)),
 		"default_transcription_language": get_settings().default_transcription_language,
 		"transcription_max_file_size_mb": cint(get_settings().transcription_max_file_size_mb) or 25,
 	}
@@ -849,7 +954,7 @@ def download_transcript_asset(job_name: str, asset_type: str):
 
 
 @frappe.whitelist()
-def start_karaoke_render(job_name: str, template: str | None = None):
+def start_karaoke_render(job_name: str, template: str | None = None, karaoke_source_mode: str | None = None):
 	_require_app_access()
 	job = _get_job_for_user(job_name)
 
@@ -861,8 +966,8 @@ def start_karaoke_render(job_name: str, template: str | None = None):
 		is_karaoke_enabled,
 		karaoke_queue_is_stale,
 	)
-
 	from audio_stem.utils.karaoke_subtitles import resolve_karaoke_style_preset
+	from audio_stem.utils.transcript_corrections import KARAOKE_SOURCE_MODES
 
 	if not is_karaoke_enabled():
 		frappe.throw(_("Karaoke rendering is disabled."), frappe.ValidationError)
@@ -875,6 +980,16 @@ def start_karaoke_render(job_name: str, template: str | None = None):
 	if not can_start:
 		frappe.throw(blocked_reason or _("Karaoke rendering cannot be started."), frappe.ValidationError)
 
+	if karaoke_source_mode:
+		mode = karaoke_source_mode.strip()
+		if mode not in KARAOKE_SOURCE_MODES:
+			frappe.throw(_("Invalid karaoke source mode."), frappe.ValidationError)
+		job.karaoke_source_mode = mode
+		job.save(ignore_permissions=True)
+
+	if job.karaoke_source_mode == "Manual Corrected" and not job.manual_transcript_json_file:
+		frappe.throw(_("Manual corrected transcript is required for this karaoke source mode."), frappe.ValidationError)
+
 	style_preset = resolve_karaoke_style_preset(template)
 	enqueue_karaoke(job, template=style_preset)
 	log_audit(
@@ -882,7 +997,7 @@ def start_karaoke_render(job_name: str, template: str | None = None):
 		reference_doctype=job.doctype,
 		reference_name=job.name,
 		message=f"Karaoke subtitle generation queued with style {style_preset}.",
-		metadata={"style_preset": style_preset},
+		metadata={"style_preset": style_preset, "karaoke_source_mode": job.karaoke_source_mode or "Auto"},
 	)
 	job.reload()
 	return {**_job_detail_payload(job), "already_active": False}
@@ -893,3 +1008,193 @@ def get_karaoke_status(job_name: str):
 	_require_app_access()
 	job = _get_job_for_user(job_name)
 	return _transcription_karaoke_payload(job)
+
+
+@frappe.whitelist()
+def upload_karaoke_background_video(job_name: str):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+
+	files = frappe.request.files
+	if not files or "file" not in files:
+		frappe.throw(_("No file uploaded"))
+
+	uploaded = _save_uploaded_video(
+		files["file"],
+		attached_to_doctype=job.doctype,
+		attached_to_name=job.name,
+		attached_to_field="karaoke_background_video_file",
+	)
+	job.karaoke_background_video_file = uploaded["file_url"]
+	job.save(ignore_permissions=True)
+	return _transcription_karaoke_payload(job)
+
+
+def _parse_transcript_payload(payload):
+	if isinstance(payload, str):
+		payload = frappe.parse_json(payload)
+	if not isinstance(payload, dict):
+		frappe.throw(_("Transcript payload must be an object."), frappe.ValidationError)
+	return payload
+
+
+def _manual_transcript_payload(job):
+	return {
+		"manual_transcript_status": job.manual_transcript_status or "Not Started",
+		"manual_transcript_text": job.manual_transcript_text,
+		"manual_transcript_json_file": job.manual_transcript_json_file,
+		"manual_transcript_srt_file": job.manual_transcript_srt_file,
+		"manual_transcript_vtt_file": job.manual_transcript_vtt_file,
+		"manual_transcript_updated_at": job.manual_transcript_updated_at,
+		"manual_transcript_approved_at": job.manual_transcript_approved_at,
+		"has_manual_transcript": bool(job.manual_transcript_json_file),
+		"has_manual_transcript_srt": bool(job.manual_transcript_srt_file),
+		"has_manual_transcript_vtt": bool(job.manual_transcript_vtt_file),
+		"manual_transcript_is_approved": (job.manual_transcript_status or "Not Started") == "Approved",
+	}
+
+
+@frappe.whitelist()
+def get_transcript_for_edit(job_name: str):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+	if not _can_edit_transcript(job):
+		frappe.throw(_("Transcript editing is not available for this job."), frappe.ValidationError)
+
+	from audio_stem.utils.audit_log import log_audit
+	from audio_stem.utils.transcript_corrections import load_transcript_for_edit
+
+	result = load_transcript_for_edit(job)
+	log_audit(
+		"View Transcript Editor",
+		reference_doctype=job.doctype,
+		reference_name=job.name,
+		message="Opened transcript editor.",
+	)
+	return {**result, **_manual_transcript_payload(job)}
+
+
+@frappe.whitelist()
+def save_transcript_corrections(job_name: str, payload):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+	if not _can_edit_transcript(job):
+		frappe.throw(_("Transcript editing is not available for this job."), frappe.ValidationError)
+
+	from audio_stem.utils.audit_log import log_audit
+	from audio_stem.utils.transcript_corrections import save_manual_transcript
+
+	parsed = _parse_transcript_payload(payload)
+	result = save_manual_transcript(job, parsed, status="Saved")
+	log_audit(
+		"Save Transcript Correction",
+		reference_doctype=job.doctype,
+		reference_name=job.name,
+		message="Saved manual transcript corrections.",
+	)
+	job.reload()
+	return {**result, **_manual_transcript_payload(job)}
+
+
+@frappe.whitelist()
+def approve_transcript_corrections(job_name: str):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+	if not _can_edit_transcript(job):
+		frappe.throw(_("Transcript editing is not available for this job."), frappe.ValidationError)
+
+	from audio_stem.utils.audit_log import log_audit
+	from audio_stem.utils.transcript_corrections import approve_manual_transcript
+
+	result = approve_manual_transcript(job)
+	log_audit(
+		"Approve Transcript Correction",
+		reference_doctype=job.doctype,
+		reference_name=job.name,
+		message="Approved manual transcript corrections.",
+	)
+	job.reload()
+	return {**result, **_manual_transcript_payload(job)}
+
+
+@frappe.whitelist()
+def reset_manual_transcript(job_name: str):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+	if not _can_edit_transcript(job):
+		frappe.throw(_("Transcript editing is not available for this job."), frappe.ValidationError)
+
+	from audio_stem.utils.audit_log import log_audit
+	from audio_stem.utils.transcript_corrections import reset_manual_transcript as reset_manual
+
+	result = reset_manual(job)
+	log_audit(
+		"Reset Transcript Correction",
+		reference_doctype=job.doctype,
+		reference_name=job.name,
+		message="Reset manual transcript corrections.",
+	)
+	job.reload()
+	return {**result, **_manual_transcript_payload(job), **_transcription_karaoke_payload(job)}
+
+
+@frappe.whitelist()
+def regenerate_subtitle_assets(job_name: str, source: str = "manual"):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+	if (job.transcription_status or "Not Started") != "Completed":
+		frappe.throw(_("Completed transcription is required."), frappe.ValidationError)
+
+	from audio_stem.utils.audit_log import log_audit
+	from audio_stem.utils.transcript_corrections import (
+		generate_srt_from_manual_transcript,
+		generate_vtt_from_manual_transcript,
+		load_transcript_json_from_file_url,
+	)
+	from audio_stem.utils.transcription_assets import (
+		write_srt_from_segments_or_words,
+		write_vtt_from_segments_or_words,
+	)
+
+	source = (source or "manual").strip().lower()
+	if source == "manual":
+		if not job.manual_transcript_json_file:
+			frappe.throw(_("Manual transcript is not available."), frappe.ValidationError)
+		generate_srt_from_manual_transcript(job)
+		generate_vtt_from_manual_transcript(job)
+	elif source == "whisper":
+		if not job.transcript_json_file:
+			frappe.throw(_("Original Whisper transcript is not available."), frappe.ValidationError)
+		data = load_transcript_json_from_file_url(job.transcript_json_file)
+		write_srt_from_segments_or_words(job, data)
+		write_vtt_from_segments_or_words(job, data)
+	else:
+		frappe.throw(_("Invalid subtitle source."), frappe.ValidationError)
+
+	job.save(ignore_permissions=True)
+	log_audit(
+		"Regenerate Subtitle Assets",
+		reference_doctype=job.doctype,
+		reference_name=job.name,
+		message=f"Regenerated subtitle assets from {source}.",
+		metadata={"source": source},
+	)
+	job.reload()
+	return {**_manual_transcript_payload(job), **_transcription_karaoke_payload(job)}
+
+
+@frappe.whitelist()
+def download_manual_transcript_asset(job_name: str, asset_type: str):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+
+	asset_type = (asset_type or "").strip().lower()
+	field_map = {
+		"json": "manual_transcript_json_file",
+		"srt": "manual_transcript_srt_file",
+		"vtt": "manual_transcript_vtt_file",
+	}
+	fieldname = field_map.get(asset_type)
+	if not fieldname or not job.get(fieldname):
+		frappe.throw(_("Manual transcript file is not available."), frappe.DoesNotExistError)
+	return {"file_url": job.get(fieldname), "asset_type": asset_type}

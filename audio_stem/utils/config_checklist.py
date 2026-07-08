@@ -3,7 +3,7 @@
 
 import frappe
 from frappe import _
-from frappe.utils import cint
+from frappe.utils import cint, flt
 
 from audio_stem.utils.limits import get_settings
 
@@ -252,6 +252,33 @@ def get_configuration_checklist_data() -> list[dict]:
 				_("Word timestamps are enabled.") if cint(settings.enable_word_timestamps) else _("Word timestamps are disabled."),
 			)
 		)
+		items.append(
+			_item(
+				"manual_transcript_correction",
+				_("Manual Transcript Correction"),
+				"ok",
+				_("Manual transcript correction is available after Whisper transcription."),
+			)
+		)
+		max_words = cint(settings.subtitle_max_words_per_line) or cint(settings.karaoke_max_words_per_line)
+		if max_words > 0 and flt(settings.subtitle_max_line_duration_seconds) > 0:
+			items.append(
+				_item(
+					"subtitle_line_settings",
+					_("Subtitle Line Settings"),
+					"ok",
+					_("Subtitle line settings are configured."),
+				)
+			)
+		else:
+			items.append(
+				_item(
+					"subtitle_line_settings",
+					_("Subtitle Line Settings"),
+					"warning",
+					_("Subtitle line settings need review."),
+				)
+			)
 	else:
 		items.append(
 			_item("openai_enabled", _("OpenAI Transcription"), "warning", _("OpenAI transcription is disabled."))

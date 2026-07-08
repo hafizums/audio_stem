@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import TranscriptEditor from "./TranscriptEditor";
 import {
 	ACTIVE_STATUSES,
 	formatCost,
@@ -62,6 +63,13 @@ export default function JobDetailPanel({
 	onTranscription,
 	onKaraoke,
 	onDownloadTranscript,
+	onLoadTranscript,
+	onSaveTranscript,
+	onApproveTranscript,
+	onResetTranscript,
+	onRegenerateSubtitles,
+	onDownloadManualTranscript,
+	onJobUpdated,
 	retrying,
 	zipping,
 	cancelling,
@@ -85,6 +93,24 @@ export default function JobDetailPanel({
 	const [transcriptionLanguage, setTranscriptionLanguage] = useState(
 		job.default_transcription_language || settings?.default_transcription_language || ""
 	);
+	const [karaokeSourceMode, setKaraokeSourceMode] = useState(job.karaoke_source_mode || "Auto");
+
+	useEffect(() => {
+		setKaraokeSourceMode(job.karaoke_source_mode || "Auto");
+	}, [job.karaoke_source_mode, job.name]);
+
+	const selectedKaraokeSourceLabel =
+		karaokeSourceMode === "Original Whisper"
+			? "Original Whisper"
+			: karaokeSourceMode === "Manual Corrected"
+				? "Manual Corrected"
+				: job.manual_transcript_is_approved && job.has_manual_transcript
+					? "Manual Corrected"
+					: "Original Whisper";
+	const karaokeNeedsRegenerate =
+		job.karaoke_status === "Completed" &&
+		job.karaoke_rendered_transcript_source_label &&
+		job.karaoke_rendered_transcript_source_label !== selectedKaraokeSourceLabel;
 
 	const vocalTranscriptionBlocked =
 		job.is_active ||
@@ -310,6 +336,19 @@ export default function JobDetailPanel({
 				)}
 			</div>
 
+			<TranscriptEditor
+				job={job}
+				settings={settings}
+				disabled={!job.can_edit_transcript || job.is_karaoke_active || karaokeRendering}
+				onLoad={onLoadTranscript}
+				onSave={onSaveTranscript}
+				onApprove={onApproveTranscript}
+				onReset={onResetTranscript}
+				onRegenerate={onRegenerateSubtitles}
+				onDownloadManual={onDownloadManualTranscript}
+				onJobUpdated={onJobUpdated}
+			/>
+
 			<div className="space-y-3 border-t border-gray-100 pt-4">
 				<h3 className="text-sm font-semibold text-gray-900">Karaoke Subtitles</h3>
 				{!job.karaoke_enabled && !settings?.karaoke_enabled ? (
@@ -325,15 +364,44 @@ export default function JobDetailPanel({
 						{settings?.karaoke_video_render_enabled && (
 							<p className="text-xs text-gray-500">MP4 video rendering is enabled on this site.</p>
 						)}
+						<label className="block text-sm text-gray-700">
+							Karaoke source
+							<select
+								className="mt-1 w-full max-w-xs rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+								value={karaokeSourceMode}
+								onChange={(event) => setKaraokeSourceMode(event.target.value)}
+								disabled={karaokeDisabled}
+							>
+								<option value="Auto">Auto</option>
+								<option value="Original Whisper">Original Whisper</option>
+								<option value="Manual Corrected">Manual Corrected</option>
+							</select>
+						</label>
+						{job.karaoke_rendered_transcript_source_label && (
+							<p className="text-xs text-gray-500">
+								Last render used: {job.karaoke_rendered_transcript_source_label}
+							</p>
+						)}
+						<p className="text-xs text-gray-500">
+							Next render will use: {selectedKaraokeSourceLabel}
+						</p>
+						{karaokeNeedsRegenerate && (
+							<p className="text-sm text-amber-700">
+								The current karaoke output does not match the selected source. Click regenerate to
+								update the ASS/MP4.
+							</p>
+						)}
 						<button
 							type="button"
 							disabled={karaokeDisabled}
-							onClick={() => onKaraoke(job.name)}
+							onClick={() => onKaraoke(job.name, karaokeSourceMode)}
 							className="rounded-md bg-purple-600 px-3 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
 						>
 							{karaokeRendering || job.is_karaoke_active
 								? "Generating..."
-								: "Generate Karaoke Subtitle"}
+								: job.karaoke_status === "Completed"
+									? "Regenerate Karaoke Subtitle"
+									: "Generate Karaoke Subtitle"}
 						</button>
 						{job.karaoke_blocked_reason && karaokeDisabled && (
 							<p className="text-sm text-gray-600">{job.karaoke_blocked_reason}</p>
