@@ -655,6 +655,91 @@ Whisper transcript
 9. **Reset Manual Edits** — confirm Whisper transcript still exists.
 10. Run all tests.
 
+## Milestone 8.3 — Karaoke background video for MP4
+
+Milestone 8.3 lets admins and users (when allowed) choose a **background video** for karaoke MP4 rendering instead of always using a generated solid-color background. ASS subtitle generation remains independent and works without FFmpeg or any background video.
+
+### Background source resolution
+
+When MP4 rendering runs, the server resolves background video in this order:
+
+1. **Job Upload** — `karaoke_background_video_file` on the job
+2. **Settings Default** — `default_karaoke_background_video` in Audio Separation Settings
+3. **Generated Color** — solid color from `karaoke_background_color` (no video file required)
+
+Clearing the job background makes the pipeline fall back to the settings default, then to generated color.
+
+### Settings fields
+
+| Field | Default | Purpose |
+| --- | --- | --- |
+| `default_karaoke_background_video` | — | Optional site-wide default background video |
+| `allow_user_karaoke_background_upload` | 1 | Allow job owners to upload backgrounds |
+| `karaoke_ignore_background_audio` | 1 | Mux instrumental/original audio only |
+| `karaoke_loop_background_video` | 1 | Loop short backgrounds to match song length |
+| `karaoke_background_blur` | 0 | Mild blur before ASS burn-in |
+| `karaoke_background_darken` | 0 | Dark overlay using `karaoke_background_darken_opacity` |
+| `karaoke_background_darken_opacity` | 0.25 | Overlay strength when darken is enabled |
+| `karaoke_background_fit_mode` | Cover | Cover, Contain, or Stretch |
+
+### FFmpeg / ffprobe
+
+- **ASS only** — no FFmpeg required
+- **MP4 with background video** — requires `ffmpeg` and `ffprobe` on PATH when `karaoke_video_render_enabled` is on
+- Short backgrounds are **looped** when `karaoke_loop_background_video` is enabled; otherwise output length follows the shorter background (with a safe warning)
+- Long backgrounds are **trimmed** to the karaoke audio duration
+- Final audio prefers **instrumental** when `karaoke_include_instrumental_audio` is enabled, otherwise **original** audio
+
+### Recommended background video
+
+- **Format:** MP4 (H.264) preferred; MOV, WEBM, and MKV are also accepted
+- **Duration:** Match or exceed song length; short clips loop automatically when enabled
+- **Resolution:** Any; scaled/cropped to `karaoke_video_width` × `karaoke_video_height` using the configured fit mode
+
+### APIs
+
+- `audio_stem.api.separation.upload_karaoke_background_video(job_name)` — multipart upload
+- `audio_stem.api.separation.set_karaoke_background_video(job_name, file_url)` — attach an existing private file
+- `audio_stem.api.separation.clear_karaoke_background_video(job_name)` — remove job background
+- `audio_stem.api.separation.get_karaoke_status(job_name)` — includes safe background source, filename, note, and upload policy
+
+### Manual test (Milestone 8.3)
+
+```bash
+cd /home/hafiz/frappe-bench
+bench --site jomveo migrate
+cd apps/audio_stem && yarn build
+cd /home/hafiz/frappe-bench
+bench build --app audio_stem
+bench --site jomveo clear-cache
+bench restart
+bench --site jomveo run-tests --app audio_stem
+```
+
+1. Deploy and migrate.
+2. Confirm ASS generation still works without a video background.
+3. Enable `karaoke_video_render_enabled`.
+4. Upload a short MP4 background on a job.
+5. Render karaoke MP4 and confirm the background appears behind subtitles.
+6. Confirm instrumental audio is used when available.
+7. Test a background shorter than the song with looping enabled.
+8. Set a default background in settings; clear job background and confirm the default is used.
+9. Clear the settings default and confirm generated color fallback.
+10. Upload a non-video file and confirm safe rejection.
+11. Run all tests.
+
+### Troubleshooting (Milestone 8.3)
+
+| Issue | Cause | Fix |
+| --- | --- | --- |
+| Unsupported background video | Wrong file type | Use MP4, MOV, WEBM, or MKV |
+| ffmpeg missing | Not on PATH | Install ffmpeg; enable video render only when ready |
+| ffprobe missing | Not on PATH | Install ffprobe for duration probing |
+| Background shorter than song | Loop disabled | Enable `karaoke_loop_background_video` |
+| Background audio in output | Ignore flag off | Enable `karaoke_ignore_background_audio` |
+| MP4 failed but ASS exists | ffmpeg burn-in error | Download ASS; check `karaoke_error` (no tracebacks exposed) |
+| Cannot upload background | Policy or active render | Check `allow_user_karaoke_background_upload`; wait for karaoke to finish |
+
 ### Troubleshooting (Milestone 8.2)
 
 | Issue | Cause | Fix |

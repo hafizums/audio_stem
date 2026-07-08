@@ -108,32 +108,34 @@ def build_prepare_video_background_ffmpeg_args(
 	width: int,
 	height: int,
 	loop_video: bool = True,
+	video_filter: str | None = None,
+	ignore_background_audio: bool = True,
+	preset: str = "veryfast",
+	crf: int = 18,
 ) -> list[str]:
 	"""Build ffmpeg args to scale/crop a background video and mux karaoke audio."""
 	duration = max(float(duration_seconds), 0.1)
-	video_filter = (
-		f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-		f"crop={width}:{height}"
-	)
+	if not video_filter:
+		video_filter = (
+			f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+			f"crop={width}:{height}"
+		)
 	args: list[str] = []
 	if loop_video:
 		args.extend(["-stream_loop", "-1"])
+	args.extend(["-i", video_path, "-i", audio_path, "-t", str(duration), "-vf", video_filter])
+	if ignore_background_audio:
+		args.extend(["-map", "0:v:0", "-map", "1:a:0"])
+	else:
+		args.extend(["-map", "0:v:0", "-map", "1:a:0"])
 	args.extend(
 		[
-			"-i",
-			video_path,
-			"-i",
-			audio_path,
-			"-t",
-			str(duration),
-			"-vf",
-			video_filter,
-			"-map",
-			"0:v:0",
-			"-map",
-			"1:a:0",
 			"-c:v",
 			"libx264",
+			"-preset",
+			preset,
+			"-crf",
+			str(crf),
 			"-pix_fmt",
 			"yuv420p",
 			"-c:a",
@@ -153,8 +155,12 @@ def prepare_video_background_with_audio(
 	width: int,
 	height: int,
 	loop_video: bool = True,
+	video_filter: str | None = None,
+	ignore_background_audio: bool = True,
+	preset: str = "veryfast",
+	crf: int = 18,
 ):
-	"""Loop/trim, scale/crop background video and mux karaoke audio (video audio ignored)."""
+	"""Loop/trim, scale/crop background video and mux karaoke audio."""
 	_run_ffmpeg(
 		build_prepare_video_background_ffmpeg_args(
 			video_path=video_path,
@@ -164,6 +170,10 @@ def prepare_video_background_with_audio(
 			width=width,
 			height=height,
 			loop_video=loop_video,
+			video_filter=video_filter,
+			ignore_background_audio=ignore_background_audio,
+			preset=preset,
+			crf=crf,
 		),
 		error_title="ffmpeg karaoke background video preparation failed",
 	)

@@ -67,6 +67,9 @@
   "karaoke_ass_file",
   "karaoke_video_file",
   "karaoke_background_video_file",
+  "karaoke_background_source",
+  "karaoke_background_duration_seconds",
+  "karaoke_background_note",
   "karaoke_subtitle_json_file",
   "karaoke_render_source_video_file",
   "karaoke_source_transcript_file",
@@ -457,6 +460,25 @@
    "fieldname": "karaoke_background_video_file",
    "fieldtype": "Attach",
    "label": "Karaoke Background Video File"
+  },
+  {
+   "fieldname": "karaoke_background_source",
+   "fieldtype": "Select",
+   "label": "Karaoke Background Source",
+   "options": "Generated Color\nJob Upload\nSettings Default",
+   "read_only": 1
+  },
+  {
+   "fieldname": "karaoke_background_duration_seconds",
+   "fieldtype": "Float",
+   "label": "Karaoke Background Duration (seconds)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "karaoke_background_note",
+   "fieldtype": "Small Text",
+   "label": "Karaoke Background Note",
+   "read_only": 1
   },
   {
    "fieldname": "karaoke_subtitle_json_file",

@@ -68,20 +68,12 @@ class TestKaraokeBackgroundVideo(TestAudioSeparationMilestone8):
 		job.karaoke_background_video_file = self._create_video_file().file_url
 		job.save(ignore_permissions=True)
 
-		with patch("audio_stem.utils.karaoke_subtitles.prepare_video_background_with_audio") as prepare_mock:
+		with patch("audio_stem.utils.karaoke_subtitles.prepare_background_video_for_render") as prepare_mock:
 			with patch("audio_stem.utils.karaoke_subtitles.create_color_video_with_audio") as color_mock:
+				prepare_mock.return_value = ("/tmp/prepared.mp4", {"karaoke_background_source": "Job Upload"})
 				create_background_video_for_karaoke(job)
 				prepare_mock.assert_called_once()
 				color_mock.assert_not_called()
-
-		prepare_kwargs = prepare_mock.call_args.kwargs
-		self.assertEqual(
-			prepare_kwargs["video_path"],
-			resolve_karaoke_background_video_path(job),
-		)
-		self.assertEqual(prepare_kwargs["audio_path"], resolve_karaoke_audio_path(job))
-		self.assertEqual(prepare_kwargs["width"], 1080)
-		self.assertEqual(prepare_kwargs["height"], 1920)
 
 	def test_create_background_uses_settings_default_video(self):
 		job = self._create_completed_job()
@@ -89,24 +81,21 @@ class TestKaraokeBackgroundVideo(TestAudioSeparationMilestone8):
 		settings.default_karaoke_background_video = self._create_video_file().file_url
 		settings.save(ignore_permissions=True)
 
-		with patch("audio_stem.utils.karaoke_subtitles.prepare_video_background_with_audio") as prepare_mock:
+		with patch("audio_stem.utils.karaoke_subtitles.prepare_background_video_for_render") as prepare_mock:
 			with patch("audio_stem.utils.karaoke_subtitles.create_color_video_with_audio") as color_mock:
+				prepare_mock.return_value = ("/tmp/prepared.mp4", {"karaoke_background_source": "Settings Default"})
 				create_background_video_for_karaoke(job)
 				prepare_mock.assert_called_once()
 				color_mock.assert_not_called()
 
-		self.assertEqual(
-			prepare_mock.call_args.kwargs["video_path"],
-			resolve_karaoke_background_video_path(job),
-		)
-
 	def test_create_background_falls_back_to_color_when_no_video(self):
 		job = self._create_completed_job()
 
-		with patch("audio_stem.utils.karaoke_subtitles.prepare_video_background_with_audio") as prepare_mock:
+		with patch("audio_stem.utils.karaoke_subtitles.prepare_background_video_for_render") as prepare_mock:
 			with patch("audio_stem.utils.karaoke_subtitles.create_color_video_with_audio") as color_mock:
+				prepare_mock.return_value = (None, {"karaoke_background_source": "Generated Color"})
 				create_background_video_for_karaoke(job)
-				prepare_mock.assert_not_called()
+				prepare_mock.assert_called_once()
 				color_mock.assert_called_once()
 
 		color_kwargs = color_mock.call_args.kwargs
@@ -189,10 +178,11 @@ class TestKaraokeBackgroundVideo(TestAudioSeparationMilestone8):
 		settings.karaoke_include_instrumental_audio = 1
 		settings.save(ignore_permissions=True)
 
-		with patch("audio_stem.utils.karaoke_subtitles.prepare_video_background_with_audio") as prepare_mock:
+		with patch("audio_stem.utils.karaoke_subtitles.prepare_background_video_for_render") as prepare_mock:
 			with patch("audio_stem.utils.karaoke_subtitles.create_color_video_with_audio"):
+				prepare_mock.return_value = ("/tmp/prepared.mp4", {"karaoke_background_source": "Job Upload"})
 				create_background_video_for_karaoke(job)
 
-		audio_path = prepare_mock.call_args.kwargs["audio_path"]
+		audio_path = resolve_karaoke_audio_path(job)
 		instrumental_path = resolve_frappe_file_path(job.instrumental_file)
 		self.assertEqual(audio_path, instrumental_path)

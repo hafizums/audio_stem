@@ -57,6 +57,13 @@
   "karaoke_video_height",
   "karaoke_background_color",
   "default_karaoke_background_video",
+  "allow_user_karaoke_background_upload",
+  "karaoke_ignore_background_audio",
+  "karaoke_loop_background_video",
+  "karaoke_background_blur",
+  "karaoke_background_darken",
+  "karaoke_background_darken_opacity",
+  "karaoke_background_fit_mode",
   "karaoke_include_instrumental_audio",
   "karaoke_ffmpeg_preset",
   "karaoke_ffmpeg_crf",
@@ -386,6 +393,50 @@
    "fieldname": "default_karaoke_background_video",
    "fieldtype": "Attach",
    "label": "Default Karaoke Background Video"
+  },
+  {
+   "default": "1",
+   "fieldname": "allow_user_karaoke_background_upload",
+   "fieldtype": "Check",
+   "label": "Allow User Karaoke Background Upload"
+  },
+  {
+   "default": "1",
+   "fieldname": "karaoke_ignore_background_audio",
+   "fieldtype": "Check",
+   "label": "Karaoke Ignore Background Audio"
+  },
+  {
+   "default": "1",
+   "fieldname": "karaoke_loop_background_video",
+   "fieldtype": "Check",
+   "label": "Karaoke Loop Background Video"
+  },
+  {
+   "default": "0",
+   "fieldname": "karaoke_background_blur",
+   "fieldtype": "Check",
+   "label": "Karaoke Background Blur"
+  },
+  {
+   "default": "0",
+   "fieldname": "karaoke_background_darken",
+   "fieldtype": "Check",
+   "label": "Karaoke Background Darken"
+  },
+  {
+   "default": "0.25",
+   "fieldname": "karaoke_background_darken_opacity",
+   "fieldtype": "Float",
+   "label": "Karaoke Background Darken Opacity",
+   "non_negative": 1
+  },
+  {
+   "default": "Cover",
+   "fieldname": "karaoke_background_fit_mode",
+   "fieldtype": "Select",
+   "label": "Karaoke Background Fit Mode",
+   "options": "Cover\nContain\nStretch"
   },
   {
    "default": "1",

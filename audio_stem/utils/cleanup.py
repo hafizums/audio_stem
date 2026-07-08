@@ -54,22 +54,42 @@ def _cleanup_job(job, settings) -> bool:
 			notes.append(_("Original file already removed or unavailable."))
 
 	if cint(settings.delete_outputs_after_retention):
+		output_fields_deleted = False
 		for field in ("vocal_file", "instrumental_file"):
 			file_url = getattr(job, field, None)
 			if file_url and _delete_attached_file(file_url):
 				setattr(job, field, None)
 				changed = True
+				output_fields_deleted = True
+
+		for field in (
+			"karaoke_ass_file",
+			"karaoke_video_file",
+			"karaoke_subtitle_json_file",
+			"karaoke_render_source_video_file",
+		):
+			file_url = getattr(job, field, None)
+			if file_url and _delete_attached_file(file_url):
+				setattr(job, field, None)
+				changed = True
+				output_fields_deleted = True
 
 		if job.vocal_file is None and job.instrumental_file is None:
 			if job.vocal_output_url:
 				job.vocal_output_url = None
 				changed = True
+				output_fields_deleted = True
 			if job.instrumental_output_url:
 				job.instrumental_output_url = None
 				changed = True
+				output_fields_deleted = True
 
-		if changed:
+		if output_fields_deleted:
 			notes.append(_("Output files removed after retention."))
+
+		if job.get("karaoke_background_video_file"):
+			notes.append(_("Job background video preserved after retention cleanup."))
+			changed = True
 
 	if notes:
 		existing = (job.cleanup_notes or "").strip()

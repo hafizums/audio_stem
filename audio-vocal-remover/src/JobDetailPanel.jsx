@@ -62,6 +62,8 @@ export default function JobDetailPanel({
 	onCancel,
 	onTranscription,
 	onKaraoke,
+	onUploadKaraokeBackground,
+	onClearKaraokeBackground,
 	onDownloadTranscript,
 	onLoadTranscript,
 	onSaveTranscript,
@@ -127,6 +129,10 @@ export default function JobDetailPanel({
 		!job.can_start_karaoke ||
 		karaokeRendering ||
 		job.is_karaoke_active;
+	const backgroundUploadDisabled =
+		karaokeRendering ||
+		job.is_karaoke_active ||
+		!job.can_upload_karaoke_background;
 	const karaokeInfoMessage =
 		job.karaoke_status === "Completed" &&
 		job.karaoke_error &&
@@ -361,9 +367,77 @@ export default function JobDetailPanel({
 								<span className="text-xs text-gray-500">karaoke_engine {job.karaoke_engine_version}</span>
 							)}
 						</div>
-						{settings?.karaoke_video_render_enabled && (
+						{settings?.karaoke_video_render_enabled ? (
 							<p className="text-xs text-gray-500">MP4 video rendering is enabled on this site.</p>
+						) : (
+							<p className="text-xs text-gray-500">
+								MP4 video rendering is disabled. ASS subtitles can still be generated without a
+								background video.
+							</p>
 						)}
+						<div className="rounded-md border border-gray-200 bg-gray-50 p-3 space-y-2">
+							<p className="text-sm font-medium text-gray-800">Karaoke background video</p>
+							<p className="text-xs text-gray-500">
+								ASS generation works without FFmpeg or a background video. Background video is only
+								used when MP4 rendering is enabled.
+							</p>
+							<p className="text-sm text-gray-700">
+								Current background:{" "}
+								<span className="font-medium">
+									{job.karaoke_background_source || "Generated Color"}
+								</span>
+								{job.karaoke_background_filename ? (
+									<span className="text-gray-500"> ({job.karaoke_background_filename})</span>
+								) : null}
+							</p>
+							{job.karaoke_background_note && (
+								<p className="text-sm text-amber-700">{job.karaoke_background_note}</p>
+							)}
+							{!job.can_upload_karaoke_background && (
+								<p className="text-xs text-gray-500">
+									User background uploads are disabled. Only the site default or generated color
+									background may be used.
+								</p>
+							)}
+							<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+								<label className="block text-sm text-gray-700">
+									<span className="sr-only">Upload background video</span>
+									<input
+										type="file"
+										accept="video/mp4,video/webm,video/quicktime,video/x-matroska,.mp4,.mov,.webm,.mkv"
+										disabled={backgroundUploadDisabled || !settings?.karaoke_video_render_enabled}
+										onChange={(event) => {
+											const file = event.target.files?.[0];
+											event.target.value = "";
+											if (file) {
+												onUploadKaraokeBackground(job.name, file);
+											}
+										}}
+										className="block w-full max-w-md text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-purple-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-purple-700 hover:file:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50"
+									/>
+								</label>
+								{(job.has_karaoke_background_video || job.karaoke_background_video_file) && (
+									<button
+										type="button"
+										disabled={backgroundUploadDisabled}
+										onClick={() => onClearKaraokeBackground(job.name)}
+										className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+									>
+										Clear background
+									</button>
+								)}
+							</div>
+							{backgroundUploadDisabled && job.is_karaoke_active && (
+								<p className="text-xs text-gray-500">
+									Background changes are disabled while karaoke rendering is active.
+								</p>
+							)}
+							{!settings?.karaoke_video_render_enabled && (
+								<p className="text-xs text-gray-500">
+									Enable MP4 rendering in settings to use a custom background video.
+								</p>
+							)}
+						</div>
 						<label className="block text-sm text-gray-700">
 							Karaoke source
 							<select

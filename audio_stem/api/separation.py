@@ -40,12 +40,14 @@ ALLOWED_AUDIO_MIMETYPES = {
 	"audio/aac",
 	"audio/x-aac",
 }
-ALLOWED_VIDEO_EXTENSIONS = (".mp4", ".webm", ".mov", ".m4v")
+ALLOWED_VIDEO_EXTENSIONS = (".mp4", ".webm", ".mov", ".m4v", ".mkv")
 ALLOWED_VIDEO_MIMETYPES = {
 	"video/mp4",
 	"video/webm",
 	"video/quicktime",
 	"video/x-m4v",
+	"video/x-matroska",
+	"video/mkv",
 }
 
 
@@ -315,6 +317,66 @@ def _can_edit_transcript(job) -> bool:
 	return True
 
 
+def _karaoke_background_payload(job) -> dict:
+	from audio_stem.utils.karaoke_backgrounds import (
+		can_upload_karaoke_background,
+		resolve_karaoke_background_video,
+	)
+
+	settings = get_settings()
+	resolved = resolve_karaoke_background_video(job)
+	source = job.get("karaoke_background_source") or resolved.get("source")
+	note = job.get("karaoke_background_note") or resolved.get("note")
+	file_name = resolved.get("file_name")
+	if job.get("karaoke_background_video_file") and not file_name:
+		file_name = _resolve_original_filename(job.karaoke_background_video_file)
+
+	return {
+		"karaoke_background_source": source,
+		"karaoke_background_filename": file_name,
+		"karaoke_background_note": note,
+		"karaoke_background_duration_seconds": flt(job.get("karaoke_background_duration_seconds"))
+		or resolved.get("duration_seconds"),
+		"can_upload_karaoke_background": can_upload_karaoke_background(job),
+		"allow_user_karaoke_background_upload": bool(cint(settings.allow_user_karaoke_background_upload)),
+		"karaoke_background_fit_mode": settings.karaoke_background_fit_mode or "Cover",
+	}
+
+
+def _assert_karaoke_background_mutable(job) -> None:
+	from audio_stem.utils.transcription_karaoke_controls import KARAOKE_ACTIVE_STATUSES, karaoke_queue_is_stale
+
+	if (job.karaoke_status or "Not Started") in KARAOKE_ACTIVE_STATUSES and not karaoke_queue_is_stale(job):
+		frappe.throw(
+			_("Karaoke rendering is active. Wait for it to finish before changing the background video."),
+			frappe.ValidationError,
+		)
+
+
+def _get_accessible_background_file(file_url: str):
+	if not file_url:
+		frappe.throw(_("Background video file was not found."), frappe.ValidationError)
+
+	file_name = frappe.db.get_value("File", {"file_url": file_url}, "name")
+	if not file_name:
+		frappe.throw(_("Background video file was not found."), frappe.ValidationError)
+
+	file_doc = frappe.get_doc("File", file_name)
+	if _is_system_manager():
+		return file_doc
+
+	if file_doc.owner == frappe.session.user:
+		return file_doc
+
+	if file_doc.attached_to_doctype == "Audio Separation Job":
+		owner = frappe.db.get_value("Audio Separation Job", file_doc.attached_to_name, "user")
+		if owner == frappe.session.user:
+			return file_doc
+
+	frappe.throw(_("Not permitted"), frappe.PermissionError)
+	return file_doc
+
+
 def _transcription_karaoke_payload(job):
 	from audio_stem.utils.transcription_karaoke_controls import (
 		can_start_karaoke,
@@ -391,6 +453,7 @@ def _transcription_karaoke_payload(job):
 		"karaoke_transcript_source_label": _karaoke_transcript_source_label(job),
 		"karaoke_rendered_transcript_source_label": _karaoke_rendered_transcript_source_label(job),
 		"can_edit_transcript": _can_edit_transcript(job),
+		**_karaoke_background_payload(job),
 	}
 
 
@@ -422,7 +485,7 @@ def _validate_video_upload(filename: str, content_type: str | None = None):
 	if mime in ALLOWED_VIDEO_MIMETYPES:
 		return
 
-	frappe.throw(_("Please upload a supported video file (MP4, WEBM, MOV)."))
+	frappe.throw(_("Please upload a supported video file (MP4, WEBM, MOV, MKV)."))
 
 
 def _save_uploaded_video(upload, *, attached_to_doctype: str | None = None, attached_to_name: str | None = None, attached_to_field: str | None = None) -> dict:
@@ -1011,9 +1074,55 @@ def get_karaoke_status(job_name: str):
 
 
 @frappe.whitelist()
+def set_karaoke_background_video(job_name: str, file_url: str):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+	_assert_karaoke_background_mutable(job)
+
+	from audio_stem.utils.karaoke_backgrounds import can_upload_karaoke_background, validate_background_video_file
+
+	if not can_upload_karaoke_background(job):
+		frappe.throw(_("User background video uploads are disabled."), frappe.PermissionError)
+
+	file_url = (file_url or "").strip()
+	if not file_url:
+		frappe.throw(_("Background video file was not found."), frappe.ValidationError)
+
+	file_doc = _get_accessible_background_file(file_url)
+	validate_background_video_file(file_doc)
+
+	job.karaoke_background_video_file = file_doc.file_url
+	job.karaoke_background_source = None
+	job.karaoke_background_note = None
+	job.karaoke_background_duration_seconds = None
+	job.save(ignore_permissions=True)
+	return _transcription_karaoke_payload(job)
+
+
+@frappe.whitelist()
+def clear_karaoke_background_video(job_name: str):
+	_require_app_access()
+	job = _get_job_for_user(job_name)
+	_assert_karaoke_background_mutable(job)
+
+	job.karaoke_background_video_file = None
+	job.karaoke_background_source = None
+	job.karaoke_background_note = None
+	job.karaoke_background_duration_seconds = None
+	job.save(ignore_permissions=True)
+	return _transcription_karaoke_payload(job)
+
+
+@frappe.whitelist()
 def upload_karaoke_background_video(job_name: str):
 	_require_app_access()
 	job = _get_job_for_user(job_name)
+	_assert_karaoke_background_mutable(job)
+
+	from audio_stem.utils.karaoke_backgrounds import can_upload_karaoke_background, validate_background_video_file
+
+	if not can_upload_karaoke_background(job):
+		frappe.throw(_("User background video uploads are disabled."), frappe.PermissionError)
 
 	files = frappe.request.files
 	if not files or "file" not in files:
@@ -1025,7 +1134,12 @@ def upload_karaoke_background_video(job_name: str):
 		attached_to_name=job.name,
 		attached_to_field="karaoke_background_video_file",
 	)
+	file_doc = frappe.get_doc("File", {"file_url": uploaded["file_url"]})
+	validate_background_video_file(file_doc)
 	job.karaoke_background_video_file = uploaded["file_url"]
+	job.karaoke_background_source = None
+	job.karaoke_background_note = None
+	job.karaoke_background_duration_seconds = None
 	job.save(ignore_permissions=True)
 	return _transcription_karaoke_payload(job)
 

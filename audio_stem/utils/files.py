@@ -19,9 +19,12 @@ def resolve_frappe_file_path(file_url: str | None) -> str | None:
 	file_name = frappe.db.get_value("File", {"file_url": file_url}, "name")
 	if file_name:
 		file_doc = frappe.get_doc("File", file_name)
-		path = file_doc.get_full_path()
-		if path and os.path.exists(path):
-			return path
+		try:
+			path = file_doc.get_full_path()
+			if path and os.path.exists(path):
+				return path
+		except Exception:
+			pass
 
 	try:
 		path = get_file_path(file_url)

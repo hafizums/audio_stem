@@ -345,6 +345,50 @@ def get_configuration_checklist_data() -> list[dict]:
 					else _("ffprobe is required for karaoke video rendering."),
 				)
 			)
+			if settings.get("default_karaoke_background_video"):
+				items.append(
+					_item(
+						"default_karaoke_background_video",
+						_("Default Karaoke Background Video"),
+						"ok",
+						_("A default karaoke background video is configured."),
+					)
+				)
+			else:
+				items.append(
+					_item(
+						"default_karaoke_background_video",
+						_("Default Karaoke Background Video"),
+						"warning",
+						_("No default karaoke background video is configured. Jobs fall back to generated color."),
+					)
+				)
+			items.append(
+				_item(
+					"allow_user_karaoke_background_upload",
+					_("User Karaoke Background Upload"),
+					"ok" if cint(settings.allow_user_karaoke_background_upload) else "warning",
+					_("Users may upload job background videos.")
+					if cint(settings.allow_user_karaoke_background_upload)
+					else _("Only System Managers or the settings default background may be used."),
+				)
+			)
+			items.append(
+				_item(
+					"karaoke_background_fit_mode",
+					_("Karaoke Background Fit Mode"),
+					"ok",
+					_("Background fit mode is {0}.").format(settings.karaoke_background_fit_mode or "Cover"),
+				)
+			)
+		items.append(
+			_item(
+				"pycaps_absent",
+				_("PyCaps / Playwright"),
+				"ok",
+				_("PyCaps and Playwright are not used by audio_stem."),
+			)
+		)
 	else:
 		items.append(_item("karaoke_enabled", _("Karaoke Subtitles"), "warning", _("Karaoke subtitle generation is disabled.")))
 

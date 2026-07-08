@@ -192,6 +192,9 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 	const { call: downloadManualTranscriptAsset } = useFrappePostCall(
 		"audio_stem.api.separation.download_manual_transcript_asset"
 	);
+	const { call: clearKaraokeBackgroundVideo } = useFrappePostCall(
+		"audio_stem.api.separation.clear_karaoke_background_video"
+	);
 
 	const displayCurrency = job?.display_currency || settings?.display_currency || "MYR";
 	const costPerSecond = settings?.cost_per_second_usd || 0;
@@ -392,6 +395,37 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 			setError(parseFrappeError(err) || err.message || "Failed to start karaoke subtitle generation");
 		} finally {
 			setKaraokeRendering(false);
+		}
+	};
+
+	const handleClearKaraokeBackground = async (name) => {
+		setError(null);
+		try {
+			await clearKaraokeBackgroundVideo({ job_name: name });
+			await fetchJobDetail();
+		} catch (err) {
+			setError(parseFrappeError(err) || err.message || "Failed to clear karaoke background video");
+		}
+	};
+
+	const handleUploadKaraokeBackground = async (name, file) => {
+		if (!file) return;
+		setError(null);
+		try {
+			await uploadFile(
+				file,
+				{
+					isPrivate: true,
+					doctype: "Audio Separation Job",
+					docname: name,
+					fieldname: "karaoke_background_video_file",
+					otherData: { job_name: name },
+				},
+				"audio_stem.api.separation.upload_karaoke_background_video"
+			);
+			await fetchJobDetail();
+		} catch (err) {
+			setError(parseFrappeError(err) || err.message || "Failed to upload karaoke background video");
 		}
 	};
 
@@ -634,6 +668,8 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 						onCancel={handleCancel}
 						onTranscription={handleTranscription}
 						onKaraoke={handleKaraoke}
+						onUploadKaraokeBackground={handleUploadKaraokeBackground}
+						onClearKaraokeBackground={handleClearKaraokeBackground}
 						onDownloadTranscript={handleDownloadTranscript}
 						onLoadTranscript={handleLoadTranscript}
 						onSaveTranscript={handleSaveTranscript}

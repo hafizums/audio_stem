@@ -15,10 +15,15 @@ from audio_stem.utils.ffmpeg_media import (
 	create_color_video_with_audio,
 	ensure_ffmpeg_available,
 	is_ffprobe_available,
-	prepare_video_background_with_audio,
 	probe_media_duration,
 )
 from audio_stem.utils.files import is_external_file_url, resolve_frappe_file_path
+from audio_stem.utils.karaoke_backgrounds import (
+	SOURCE_GENERATED_COLOR,
+	apply_background_metadata,
+	prepare_background_video_for_render,
+	resolve_karaoke_background_video,
+)
 from audio_stem.utils.limits import get_settings
 
 STYLE_PRESET_FACTORIES = {
@@ -132,28 +137,8 @@ def resolve_karaoke_audio_path(job) -> str:
 
 def resolve_karaoke_background_video_path(job) -> str | None:
 	"""Resolve uploaded job background video, then site default, else None."""
-	candidates = []
-	if job.get("karaoke_background_video_file"):
-		candidates.append(job.karaoke_background_video_file)
-
-	settings = get_settings()
-	if settings.get("default_karaoke_background_video"):
-		candidates.append(settings.default_karaoke_background_video)
-
-	for file_url in candidates:
-		if not file_url:
-			continue
-		if is_external_file_url(file_url):
-			response = requests.get(file_url, timeout=120)
-			response.raise_for_status()
-			tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-			tmp.write(response.content)
-			tmp.close()
-			return tmp.name
-		path = resolve_frappe_file_path(file_url)
-		if path and os.path.exists(path):
-			return path
-	return None
+	resolved = resolve_karaoke_background_video(job)
+	return resolved.get("local_path")
 
 
 def _resolve_karaoke_duration_seconds(job, audio_path: str) -> float:
@@ -169,20 +154,13 @@ def create_background_video_for_karaoke(job, background_color: str | None = None
 	duration = _resolve_karaoke_duration_seconds(job, audio_path)
 	width = cint(settings.karaoke_video_width) or 1080
 	height = cint(settings.karaoke_video_height) or 1920
+
+	prepared_path, metadata = prepare_background_video_for_render(job, duration)
+	apply_background_metadata(job, metadata)
+	if prepared_path:
+		return prepared_path
+
 	output_path = tempfile.mktemp(suffix=".mp4")
-
-	background_video_path = resolve_karaoke_background_video_path(job)
-	if background_video_path:
-		prepare_video_background_with_audio(
-			video_path=background_video_path,
-			audio_path=audio_path,
-			output_path=output_path,
-			duration_seconds=duration,
-			width=width,
-			height=height,
-		)
-		return output_path
-
 	color = background_color or settings.karaoke_background_color or "#111111"
 	create_color_video_with_audio(
 		output_path=output_path,
@@ -191,6 +169,14 @@ def create_background_video_for_karaoke(job, background_color: str | None = None
 		height=height,
 		background_color=color,
 		audio_path=audio_path,
+	)
+	apply_background_metadata(
+		job,
+		{
+			"karaoke_background_source": SOURCE_GENERATED_COLOR,
+			"karaoke_background_note": metadata.get("karaoke_background_note"),
+			"karaoke_background_duration_seconds": None,
+		},
 	)
 	return output_path
 
