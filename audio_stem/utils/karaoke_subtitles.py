@@ -14,6 +14,7 @@ from frappe.utils import cint, flt
 from audio_stem.utils.ffmpeg_media import (
 	create_color_video_with_audio,
 	ensure_ffmpeg_available,
+	get_ffmpeg_timeout_seconds,
 	is_ffprobe_available,
 	probe_media_duration,
 )
@@ -348,6 +349,7 @@ def _render_options_from_settings():
 	return RenderOptions(
 		crf=cint(settings.karaoke_ffmpeg_crf) or 18,
 		preset=(settings.karaoke_ffmpeg_preset or "veryfast").strip(),
+		timeout_seconds=float(get_ffmpeg_timeout_seconds()),
 	)
 
 

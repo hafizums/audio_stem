@@ -373,6 +373,10 @@ bench --site <your-site> run-tests --app audio_stem
 | Job stuck in `Queued` | Background worker not running | `bench doctor`, Redis/queue, `bench worker --queue long` |
 | Missing worker / no processing | Scheduler or worker down | `bench restart`, confirm long queue worker |
 | Insufficient credits | Balance too low | Grant credits in Credit Management; check `credit_status` |
+| `credit_status = Reconciliation Required` | Separation succeeded but credit consume failed | System Manager: `get_credit_reconciliation_issues` / `retry_credit_reconciliation`; outputs are kept |
+| Karaoke/video render hangs | FFmpeg transcode stuck | Check `karaoke_ffmpeg_timeout_seconds` (default 1800s); worker should fail with safe timeout message |
+| Cannot restart transcription/karaoke | Status was `Cancelled` | Re-start is allowed from `Cancelled` (Gate 10); use Start in UI/API |
+| `Not permitted` on job create | Using another user's uploaded file | Upload your own file or ask System Manager |
 | WaveSpeed API key missing | Settings not configured | Configuration checklist; set key in Audio Separation Settings |
 | Duration cannot be detected | Unsupported/corrupt audio | Re-upload MP3/WAV; check file metadata |
 | ZIP failed | External URLs expired or files removed | Enable `store_outputs_locally`; retry ZIP on completed job |
@@ -508,6 +512,7 @@ OpenAI Whisper transcription and karaoke subtitle generation (`karaoke_engine` +
 | `karaoke_include_instrumental_audio` | 1 | Prefer instrumental audio in karaoke video |
 | `karaoke_ffmpeg_preset` | `veryfast` | ffmpeg preset when rendering MP4 |
 | `karaoke_ffmpeg_crf` | 18 | ffmpeg CRF when rendering MP4 |
+| `karaoke_ffmpeg_timeout_seconds` | 1800 | Max seconds per ffmpeg/ffprobe subprocess (prevents hung workers) |
 | `charge_credits_for_karaoke` | 0 | Reserved — not implemented yet (separation credits only today) |
 
 **Pipelines**

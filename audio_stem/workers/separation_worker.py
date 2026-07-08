@@ -11,6 +11,7 @@ from frappe.utils.file_manager import get_file_path
 from audio_stem.integrations.wavespeed_client import isolate_vocal_and_instrumental
 from audio_stem.utils.audit_log import log_audit
 from audio_stem.utils.cancellation import finalize_cancelled_job, should_stop_for_cancellation
+from audio_stem.utils.credit_reconciliation import CREDIT_RECONCILIATION_STATUS
 from audio_stem.utils.errors import safe_error_message
 from audio_stem.utils.limits import calculate_provider_cost, get_settings
 from audio_stem.utils.output_storage import maybe_store_outputs_locally
@@ -32,7 +33,7 @@ def _consume_job_credits_if_needed(job):
 		consume_job_reservation(job)
 		job.save(ignore_permissions=True)
 	except Exception as exc:
-		job.credit_status = "Failed"
+		job.credit_status = CREDIT_RECONCILIATION_STATUS
 		job.credit_error = safe_error_message(exc)
 		job.save(ignore_permissions=True)
 		frappe.log_error(
@@ -116,6 +117,26 @@ def process_audio_separation(name: str):
 			return
 
 		result = isolate_vocal_and_instrumental(local_audio_path)
+
+		if should_stop_for_cancellation(job):
+			_release_job_credits_if_needed(
+				job,
+				reason=_("Cancellation completed after provider returned."),
+			)
+			finalize_cancelled_job(
+				job,
+				cancelled_by=job.cancelled_by or job.user,
+				cancel_reason=job.cancel_reason
+				or _("Cancellation completed after provider returned."),
+			)
+			log_audit(
+				"Cancel Job",
+				reference_doctype=job.doctype,
+				reference_name=job.name,
+				message=_("Cancellation completed after provider returned."),
+				user=job.user,
+			)
+			return
 
 		settings = get_settings()
 		job.provider_cost_usd = calculate_provider_cost(job.duration_seconds, settings)

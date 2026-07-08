@@ -97,6 +97,7 @@ DEFAULT_AUDIO_SEPARATION_TEST_SETTINGS = {
 	"karaoke_include_instrumental_audio": 1,
 	"karaoke_ffmpeg_preset": "veryfast",
 	"karaoke_ffmpeg_crf": 18,
+	"karaoke_ffmpeg_timeout_seconds": 1800,
 	"charge_credits_for_karaoke": 0,
 }
 

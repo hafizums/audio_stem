@@ -9,6 +9,18 @@ import tempfile
 
 import frappe
 from frappe import _
+from frappe.utils import cint
+
+from audio_stem.utils.limits import get_settings
+
+
+def get_ffmpeg_timeout_seconds() -> int:
+	settings = get_settings()
+	return max(cint(settings.karaoke_ffmpeg_timeout_seconds) or 1800, 1)
+
+
+def get_ffprobe_timeout_seconds() -> int:
+	return min(get_ffmpeg_timeout_seconds(), 120)
 
 
 def is_ffprobe_available() -> bool:
@@ -35,14 +47,22 @@ def ensure_ffmpeg_available():
 		)
 
 
-def _run_ffmpeg(args: list[str], *, error_title: str = "ffmpeg failed"):
+def _run_ffmpeg(args: list[str], *, error_title: str = "ffmpeg failed", timeout_seconds: int | None = None):
+	timeout = timeout_seconds if timeout_seconds is not None else get_ffmpeg_timeout_seconds()
 	try:
 		result = subprocess.run(
 			["ffmpeg", "-y", *args],
 			capture_output=True,
 			text=True,
 			check=False,
+			timeout=timeout,
 		)
+	except subprocess.TimeoutExpired as exc:
+		frappe.log_error(
+			title=error_title,
+			message=f"ffmpeg timed out after {timeout} seconds",
+		)
+		frappe.throw(_("Media processing timed out. Please try again later."), frappe.ValidationError)
 	except FileNotFoundError as exc:
 		ensure_ffmpeg_available()
 		raise exc
@@ -73,8 +93,9 @@ def probe_media_duration(path: str) -> float | None:
 			capture_output=True,
 			text=True,
 			check=False,
+			timeout=get_ffprobe_timeout_seconds(),
 		)
-	except OSError:
+	except (OSError, subprocess.TimeoutExpired):
 		return None
 
 	if result.returncode != 0:

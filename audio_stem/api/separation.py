@@ -85,10 +85,31 @@ def _get_job_for_user(job_name: str):
 
 
 def _get_attached_file_doc(file_url: str):
+	return _get_accessible_file_doc(file_url)
+
+
+def _get_accessible_file_doc(file_url: str):
+	if not file_url:
+		frappe.throw(_("Uploaded file not found"))
+
 	file_name = frappe.db.get_value("File", {"file_url": file_url}, "name")
 	if not file_name:
 		frappe.throw(_("Uploaded file not found"))
-	return frappe.get_doc("File", file_name)
+
+	file_doc = frappe.get_doc("File", file_name)
+	if _is_system_manager():
+		return file_doc
+
+	if file_doc.owner == frappe.session.user:
+		return file_doc
+
+	if file_doc.attached_to_doctype == "Audio Separation Job":
+		job_owner = frappe.db.get_value("Audio Separation Job", file_doc.attached_to_name, "user")
+		if job_owner == frappe.session.user:
+			return file_doc
+
+	frappe.throw(_("Not permitted"), frappe.PermissionError)
+	return file_doc
 
 
 def _credit_settings_flag_enabled() -> bool:
@@ -895,7 +916,7 @@ def _prepare_and_queue_job(
 	)
 
 	if is_credit_management_enabled():
-		if job.credit_status in ("Released", "Failed"):
+		if job.credit_status in ("Released", "Failed", "Reconciliation Required"):
 			job.credit_reservation = None
 			job.reserved_amount = 0
 			job.consumed_amount = 0

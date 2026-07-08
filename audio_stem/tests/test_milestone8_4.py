@@ -59,6 +59,7 @@ class TestMilestone84UiRedesign(TestAudioSeparationMilestone8):
 		self.assertIsInstance(admin_api.get_queue_health(), dict)
 		self.assertIsInstance(admin_api.get_provider_health(), dict)
 		self.assertIsInstance(admin_api.get_audio_stem_usage_summary(), dict)
+		self.assertIsInstance(admin_api.get_credit_reconciliation_issues(), list)
 
 	def test_page_settings_payload_has_no_forbidden_ui_words(self):
 		payload = get_page_settings()

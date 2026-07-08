@@ -240,7 +240,7 @@ class TestAudioSeparationMilestone4(AudioStemTestCase):
 		job.reload()
 		self.assertEqual(job.status, "Completed")
 		self.assertEqual(job.vocal_output_url, vocal_url)
-		self.assertEqual(job.credit_status, "Failed")
+		self.assertEqual(job.credit_status, "Reconciliation Required")
 		self.assertNotIn("secret", job.credit_error or "")
 		self.assertNotIn("api_key", (job.credit_error or "").lower())
 		self.assertEqual(

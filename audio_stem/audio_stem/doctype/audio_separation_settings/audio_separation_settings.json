@@ -79,6 +79,7 @@
   "karaoke_include_instrumental_audio",
   "karaoke_ffmpeg_preset",
   "karaoke_ffmpeg_crf",
+  "karaoke_ffmpeg_timeout_seconds",
   "charge_credits_for_karaoke",
   "section_break_credits",
   "credit_management_enabled",
@@ -544,6 +545,13 @@
    "fieldname": "karaoke_ffmpeg_crf",
    "fieldtype": "Int",
    "label": "Karaoke FFmpeg CRF",
+   "non_negative": 1
+  },
+  {
+   "default": "1800",
+   "fieldname": "karaoke_ffmpeg_timeout_seconds",
+   "fieldtype": "Int",
+   "label": "Karaoke FFmpeg Timeout Seconds",
    "non_negative": 1
   },
   {

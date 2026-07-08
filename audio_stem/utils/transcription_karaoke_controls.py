@@ -11,8 +11,8 @@ from audio_stem.utils.limits import get_settings
 
 TRANSCRIPTION_ACTIVE_STATUSES = ("Queued", "Processing")
 KARAOKE_ACTIVE_STATUSES = ("Queued", "Rendering")
-TRANSCRIPTION_STARTABLE = ("Not Started", "Failed")
-KARAOKE_STARTABLE = ("Not Started", "Failed", "Completed")
+TRANSCRIPTION_STARTABLE = ("Not Started", "Failed", "Cancelled")
+KARAOKE_STARTABLE = ("Not Started", "Failed", "Cancelled", "Completed")
 
 
 def is_karaoke_enabled() -> bool:
