@@ -492,7 +492,7 @@ OpenAI Whisper transcription and karaoke subtitle generation (`karaoke_engine` +
 | `transcription_cost_per_minute_usd` | 0 | Estimated cost tracking only unless credits enabled |
 | `default_transcription_language` | — | Optional language hint |
 | `enable_word_timestamps` | 1 | Request word + segment timestamps |
-| `charge_credits_for_transcription` | 0 | Optional credit charge (uses credit client only) |
+| `charge_credits_for_transcription` | 0 | Reserved — not implemented yet (separation credits only today) |
 
 ### Karaoke / karaoke_engine (Milestone 8.1)
 
@@ -508,7 +508,7 @@ OpenAI Whisper transcription and karaoke subtitle generation (`karaoke_engine` +
 | `karaoke_include_instrumental_audio` | 1 | Prefer instrumental audio in karaoke video |
 | `karaoke_ffmpeg_preset` | `veryfast` | ffmpeg preset when rendering MP4 |
 | `karaoke_ffmpeg_crf` | 18 | ffmpeg CRF when rendering MP4 |
-| `charge_credits_for_karaoke` | 0 | Optional credit charge (uses credit client only) |
+| `charge_credits_for_karaoke` | 0 | Reserved — not implemented yet (separation credits only today) |
 
 **Pipelines**
 
