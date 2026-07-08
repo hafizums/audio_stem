@@ -17,11 +17,26 @@ from audio_stem.utils.ffmpeg_media import (
 	transcode_audio_mono_mp3,
 )
 from audio_stem.utils.files import is_external_file_url, resolve_frappe_file_path
+from audio_stem.integrations.transcription_provider import PROVIDER_ELEVENLABS, PROVIDER_OPENAI, get_transcription_provider
 from audio_stem.utils.limits import get_settings
 
 
-def estimate_transcription_cost(duration_seconds) -> float:
+def estimate_transcription_cost(
+	duration_seconds,
+	*,
+	provider: str | None = None,
+	keyterms_used: bool = False,
+) -> float:
 	settings = get_settings()
+	provider = provider or get_transcription_provider(settings)
+	duration_hours = flt(duration_seconds) / 3600.0
+
+	if provider == PROVIDER_ELEVENLABS:
+		cost = duration_hours * flt(settings.elevenlabs_cost_per_hour_usd or 0.22)
+		if keyterms_used:
+			cost += duration_hours * flt(settings.elevenlabs_keyterm_cost_per_hour_usd or 0.05)
+		return flt(cost)
+
 	minutes = flt(duration_seconds) / 60.0
 	return flt(minutes * flt(settings.transcription_cost_per_minute_usd or 0))
 
@@ -141,6 +156,18 @@ def write_transcript_json(job, transcript_data: dict) -> str:
 		fieldname="transcript_json_file",
 	)
 	job.transcript_json_file = file_url
+	return file_url
+
+
+def write_raw_provider_json(job, raw_response_dict: dict) -> str:
+	content = json.dumps(raw_response_dict or {}, indent=2)
+	file_url = _attach_private_file(
+		job,
+		file_name=f"{job.name}-transcript-provider-raw.json",
+		content=content,
+		fieldname="transcription_raw_provider_json_file",
+	)
+	job.transcription_raw_provider_json_file = file_url
 	return file_url
 
 

@@ -432,13 +432,31 @@ def _transcription_karaoke_payload(job):
 		transcription_queue_is_stale,
 	)
 	from audio_stem.integrations.openai_transcription_client import is_openai_transcription_enabled
+	from audio_stem.integrations.elevenlabs_scribe_client import is_elevenlabs_scribe_enabled
+	from audio_stem.integrations.transcription_provider import (
+		PROVIDER_ELEVENLABS,
+		PROVIDER_OPENAI,
+		get_transcription_provider,
+		is_transcription_provider_configured,
+	)
 
 	settings = get_settings()
-	can_transcribe, transcription_blocked_reason = can_start_transcription(job)
+	site_provider = get_transcription_provider(settings)
+	can_transcribe, transcription_blocked_reason = can_start_transcription(job, provider=site_provider)
 	can_karaoke, karaoke_blocked_reason = can_start_karaoke(job)
 	downstream = downstream_assets_payload(job)
 	return {
 		"openai_enabled": is_openai_transcription_enabled(),
+		"elevenlabs_scribe_enabled": is_elevenlabs_scribe_enabled(),
+		"transcription_provider": job.get("transcription_provider") or site_provider,
+		"transcription_provider_model": job.get("transcription_provider_model"),
+		"transcription_language_probability": flt(job.get("transcription_language_probability")),
+		"transcription_keyterms_used": job.get("transcription_keyterms_used"),
+		"transcription_provider_warning": job.get("transcription_provider_warning"),
+		"transcription_enabled": is_transcription_provider_configured(site_provider, settings),
+		"site_transcription_provider": site_provider,
+		"openai_provider_available": is_transcription_provider_configured(PROVIDER_OPENAI, settings),
+		"elevenlabs_provider_available": is_transcription_provider_configured(PROVIDER_ELEVENLABS, settings),
 		"karaoke_enabled": is_karaoke_enabled(),
 		"transcription_status": job.get("transcription_status") or "Not Started",
 		"transcription_source": job.get("transcription_source"),
@@ -502,6 +520,12 @@ def _transcription_karaoke_payload(job):
 		"transcription_prompt_text": settings.transcription_prompt_text,
 		"transcription_audio_preprocess_enabled": bool(cint(settings.transcription_audio_preprocess_enabled)),
 		"transcription_chunking_enabled": bool(cint(settings.transcription_chunking_enabled)),
+		"elevenlabs_scribe_model": settings.elevenlabs_scribe_model or "scribe_v2",
+		"elevenlabs_language_code": settings.elevenlabs_language_code,
+		"elevenlabs_use_keyterms": bool(cint(settings.elevenlabs_use_keyterms)),
+		"elevenlabs_no_verbatim": bool(cint(settings.elevenlabs_no_verbatim)),
+		"elevenlabs_tag_audio_events": bool(cint(settings.elevenlabs_tag_audio_events)),
+		"elevenlabs_diarize": bool(cint(settings.elevenlabs_diarize)),
 		"manual_transcript_status": job.get("manual_transcript_status") or "Not Started",
 		"manual_transcript_text": job.get("manual_transcript_text"),
 		"manual_transcript_json_file": job.get("manual_transcript_json_file"),
@@ -699,6 +723,13 @@ def get_job_detail(job_name: str):
 def get_page_settings():
 	_require_login()
 	from audio_stem.integrations.credit_management_client import get_audio_credit_type, is_credit_management_enabled
+	from audio_stem.integrations.elevenlabs_scribe_client import is_elevenlabs_scribe_enabled
+	from audio_stem.integrations.transcription_provider import (
+		PROVIDER_ELEVENLABS,
+		PROVIDER_OPENAI,
+		get_transcription_provider,
+		is_transcription_provider_configured,
+	)
 	from audio_stem.utils.karaoke_style_settings import karaoke_style_settings_payload
 	from audio_stem.utils.daily_limits import get_daily_limit_status
 	from audio_stem.utils.pilot_access import get_pilot_access_status
@@ -706,6 +737,8 @@ def get_page_settings():
 	limits = get_limits_payload()
 	pilot = get_pilot_access_status()
 	daily_usage = get_daily_limit_status() if pilot.get("pilot_access_allowed") else None
+	settings = get_settings()
+	site_provider = get_transcription_provider(settings)
 	return {
 		**limits,
 		**pilot,
@@ -715,24 +748,35 @@ def get_page_settings():
 		"credit_type": get_audio_credit_type() if is_credit_management_enabled() else None,
 		"accepted_file_types": "MP3, WAV, M4A, FLAC, OGG, AAC",
 		"is_system_manager": _is_system_manager(),
-		"openai_enabled": bool(cint(get_settings().openai_enabled)),
-		"karaoke_enabled": bool(cint(get_settings().karaoke_enabled)),
+		"openai_enabled": bool(cint(settings.openai_enabled)),
+		"elevenlabs_scribe_enabled": is_elevenlabs_scribe_enabled(),
+		"transcription_provider": site_provider,
+		"transcription_enabled": is_transcription_provider_configured(site_provider, settings),
+		"openai_provider_available": is_transcription_provider_configured(PROVIDER_OPENAI, settings),
+		"elevenlabs_provider_available": is_transcription_provider_configured(PROVIDER_ELEVENLABS, settings),
+		"karaoke_enabled": bool(cint(settings.karaoke_enabled)),
 		"karaoke_ass_enabled": bool(cint(get_settings().karaoke_ass_enabled)),
 		"karaoke_video_render_enabled": bool(cint(get_settings().karaoke_video_render_enabled)),
-		"karaoke_style_preset": get_settings().karaoke_style_preset or "default_1080p",
-		"karaoke_include_instrumental_audio": bool(cint(get_settings().karaoke_include_instrumental_audio)),
-		"has_default_karaoke_background_video": bool(get_settings().default_karaoke_background_video),
+		"karaoke_style_preset": settings.karaoke_style_preset or "default_1080p",
+		"karaoke_include_instrumental_audio": bool(cint(settings.karaoke_include_instrumental_audio)),
+		"has_default_karaoke_background_video": bool(settings.default_karaoke_background_video),
 		"subtitle_max_words_per_line": cint(get_settings().subtitle_max_words_per_line) or 5,
 		"subtitle_max_line_duration_seconds": flt(get_settings().subtitle_max_line_duration_seconds) or 4.0,
 		"subtitle_min_word_duration_seconds": flt(get_settings().subtitle_min_word_duration_seconds) or 0.08,
 		"subtitle_snap_overlaps": bool(cint(get_settings().subtitle_snap_overlaps)),
-		"default_transcription_language": get_settings().default_transcription_language,
-		"transcription_max_file_size_mb": cint(get_settings().transcription_max_file_size_mb) or 25,
-		"transcription_use_vocal_stem_by_default": bool(cint(get_settings().transcription_use_vocal_stem_by_default)),
-		"transcription_prompt_enabled": bool(cint(get_settings().transcription_prompt_enabled)),
-		"transcription_prompt_text": get_settings().transcription_prompt_text,
-		"transcription_audio_preprocess_enabled": bool(cint(get_settings().transcription_audio_preprocess_enabled)),
-		"transcription_chunking_enabled": bool(cint(get_settings().transcription_chunking_enabled)),
+		"default_transcription_language": settings.default_transcription_language,
+		"transcription_max_file_size_mb": cint(settings.transcription_max_file_size_mb) or 25,
+		"transcription_use_vocal_stem_by_default": bool(cint(settings.transcription_use_vocal_stem_by_default)),
+		"transcription_prompt_enabled": bool(cint(settings.transcription_prompt_enabled)),
+		"transcription_prompt_text": settings.transcription_prompt_text,
+		"transcription_audio_preprocess_enabled": bool(cint(settings.transcription_audio_preprocess_enabled)),
+		"transcription_chunking_enabled": bool(cint(settings.transcription_chunking_enabled)),
+		"elevenlabs_scribe_model": settings.elevenlabs_scribe_model or "scribe_v2",
+		"elevenlabs_language_code": settings.elevenlabs_language_code,
+		"elevenlabs_use_keyterms": bool(cint(settings.elevenlabs_use_keyterms)),
+		"elevenlabs_no_verbatim": bool(cint(settings.elevenlabs_no_verbatim)),
+		"elevenlabs_tag_audio_events": bool(cint(settings.elevenlabs_tag_audio_events)),
+		"elevenlabs_diarize": bool(cint(settings.elevenlabs_diarize)),
 		**karaoke_style_settings_payload(),
 	}
 
@@ -1109,13 +1153,23 @@ def start_transcription(
 	source: str | None = None,
 	language: str | None = None,
 	prompt: str | None = None,
+	provider: str | None = None,
+	scribe_model: str | None = None,
+	keyterms: str | None = None,
+	no_verbatim: int | None = None,
+	tag_audio_events: int | None = None,
+	diarize: int | None = None,
 ):
 	_require_app_access()
 	job = _get_job_for_user(job_name)
 	settings = get_settings()
 
-	from audio_stem.integrations.openai_transcription_client import is_openai_transcription_enabled
+	from audio_stem.integrations.transcription_provider import (
+		get_transcription_provider_blocked_reason,
+		resolve_transcription_provider,
+	)
 	from audio_stem.utils.audit_log import log_audit
+	from audio_stem.utils.scribe_keyterms import parse_keyterms, validate_keyterms
 	from audio_stem.utils.transcription_karaoke_controls import (
 		TRANSCRIPTION_ACTIVE_STATUSES,
 		can_start_transcription_source,
@@ -1128,22 +1182,17 @@ def start_transcription(
 		validate_transcription_prompt_text,
 	)
 
-	if not is_openai_transcription_enabled():
-		frappe.throw(_("OpenAI transcription is disabled."), frappe.ValidationError)
-
-	api_key = (settings.get_password("openai_api_key", raise_exception=False) or "").strip()
-	if not api_key:
-		frappe.throw(
-			_("OpenAI API key is not configured in Audio Separation Settings."),
-			frappe.ValidationError,
-		)
+	selected_provider = resolve_transcription_provider(provider, settings)
+	blocked_reason = get_transcription_provider_blocked_reason(selected_provider, settings)
+	if blocked_reason:
+		frappe.throw(blocked_reason, frappe.ValidationError)
 
 	if (job.transcription_status or "Not Started") in TRANSCRIPTION_ACTIVE_STATUSES:
 		if not transcription_queue_is_stale(job):
 			return {**_job_detail_payload(job), "already_active": True}
 
 	source = (source or resolve_default_transcription_source(settings)).strip()
-	can_start, blocked_reason = can_start_transcription_source(job, source)
+	can_start, blocked_reason = can_start_transcription_source(job, source, provider=selected_provider)
 	if not can_start:
 		frappe.throw(blocked_reason or _("Transcription cannot be started."), frappe.ValidationError)
 
@@ -1155,13 +1204,26 @@ def start_transcription(
 	language = resolve_transcription_language(language or settings.default_transcription_language, settings)
 	if prompt:
 		validate_transcription_prompt_text(prompt)
-	enqueue_transcription(job, source=source, language=language, prompt=prompt)
+	if keyterms:
+		validate_keyterms(parse_keyterms(keyterms))
+	enqueue_transcription(
+		job,
+		source=source,
+		language=language,
+		prompt=prompt,
+		provider=selected_provider,
+		scribe_model=scribe_model,
+		keyterms=keyterms,
+		no_verbatim=no_verbatim,
+		tag_audio_events=tag_audio_events,
+		diarize=diarize,
+	)
 	log_audit(
 		"Start Transcription",
 		reference_doctype=job.doctype,
 		reference_name=job.name,
-		message=f"Transcription queued from {source}.",
-		metadata={"source": source, "language": language},
+		message=f"Transcription queued from {source} via {selected_provider}.",
+		metadata={"source": source, "language": language, "provider": selected_provider},
 	)
 	job.reload()
 	return {**_job_detail_payload(job), "already_active": False}

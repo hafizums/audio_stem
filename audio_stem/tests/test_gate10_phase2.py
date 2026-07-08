@@ -119,7 +119,7 @@ class TestGate10Phase2DownstreamStale(AudioStemTestCase):
 		settings.save(ignore_permissions=True)
 
 		with patch(
-			"audio_stem.workers.transcription_worker.transcribe_with_whisper",
+			"audio_stem.workers.transcription_worker.transcribe_audio",
 			return_value={"text": "hello", "segments": [], "duration": 1},
 		), patch(
 			"audio_stem.workers.transcription_worker.write_transcript_json",
@@ -307,7 +307,7 @@ class TestGate10Phase2PipelineCancellation(AudioStemTestCase):
 		job.vocal_output_url = "https://example.com/vocal.mp3"
 		job.save(ignore_permissions=True)
 
-		def _transcribe_and_cancel(_path, language=None, prompt=None):
+		def _transcribe_and_cancel(_path, language=None, prompt=None, **kwargs):
 			active = frappe.get_doc("Audio Separation Job", job.name)
 			active.cancellation_requested = 1
 			active.save(ignore_permissions=True)
@@ -321,7 +321,7 @@ class TestGate10Phase2PipelineCancellation(AudioStemTestCase):
 			"audio_stem.workers.transcription_worker.prepare_audio_for_whisper",
 			return_value=("/tmp/fake.mp3", False),
 		), patch(
-			"audio_stem.workers.transcription_worker.transcribe_with_whisper",
+			"audio_stem.workers.transcription_worker.transcribe_audio",
 			side_effect=_transcribe_and_cancel,
 		):
 			process_transcription(job.name)

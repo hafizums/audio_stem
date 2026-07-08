@@ -376,7 +376,7 @@ class TestAudioSeparationMilestone8(AudioStemTestCase):
 		self.assertIn("karaoke_ass_completed_count", summary)
 		self.assertIn("karaoke_video_completed_count", summary)
 
-	@patch("audio_stem.workers.transcription_worker.transcribe_with_whisper")
+	@patch("audio_stem.workers.transcription_worker.transcribe_audio")
 	@patch("audio_stem.workers.transcription_worker.resolve_transcription_source_path")
 	@patch("audio_stem.workers.transcription_worker.prepare_audio_for_whisper")
 	def test_transcription_worker_completes(self, prepare_mock, resolve_mock, transcribe_mock):

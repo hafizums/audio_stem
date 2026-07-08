@@ -6,7 +6,11 @@ from frappe import _
 from frappe.utils import cint, now_datetime
 from frappe.utils.background_jobs import is_job_enqueued
 
-from audio_stem.integrations.openai_transcription_client import is_openai_transcription_enabled
+from audio_stem.integrations.transcription_provider import (
+	get_transcription_provider,
+	get_transcription_provider_blocked_reason,
+	is_transcription_provider_configured,
+)
 from audio_stem.utils.limits import get_settings
 
 TRANSCRIPTION_ACTIVE_STATUSES = ("Queued", "Processing")
@@ -42,9 +46,11 @@ def karaoke_queue_is_stale(job) -> bool:
 	return _is_stale_queued_status(job, job_id_prefix="audio_karaoke", status=status)
 
 
-def can_start_transcription(job) -> tuple[bool, str | None]:
-	if not is_openai_transcription_enabled():
-		return False, _("OpenAI transcription is disabled.")
+def can_start_transcription(job, provider: str | None = None) -> tuple[bool, str | None]:
+	settings = get_settings()
+	provider = provider or get_transcription_provider(settings)
+	if not is_transcription_provider_configured(provider, settings):
+		return False, get_transcription_provider_blocked_reason(provider, settings)
 
 	status = _default_transcription_status(job)
 	if transcription_queue_is_stale(job):
@@ -58,8 +64,8 @@ def can_start_transcription(job) -> tuple[bool, str | None]:
 	return True, None
 
 
-def can_start_transcription_source(job, source: str) -> tuple[bool, str | None]:
-	can_start, reason = can_start_transcription(job)
+def can_start_transcription_source(job, source: str, provider: str | None = None) -> tuple[bool, str | None]:
+	can_start, reason = can_start_transcription(job, provider=provider)
 	if not can_start:
 		return can_start, reason
 
@@ -97,7 +103,19 @@ def can_start_karaoke(job) -> tuple[bool, str | None]:
 	return True, None
 
 
-def enqueue_transcription(job, *, source: str, language: str | None = None, prompt: str | None = None):
+def enqueue_transcription(
+	job,
+	*,
+	source: str,
+	language: str | None = None,
+	prompt: str | None = None,
+	provider: str | None = None,
+	scribe_model: str | None = None,
+	keyterms: str | None = None,
+	no_verbatim: int | None = None,
+	tag_audio_events: int | None = None,
+	diarize: int | None = None,
+):
 	if (job.transcription_status or "Not Started") == "Completed":
 		from audio_stem.utils.downstream_assets import mark_transcription_retry_stale
 
@@ -112,6 +130,9 @@ def enqueue_transcription(job, *, source: str, language: str | None = None, prom
 	job.transcription_detected_language = None
 	job.transcription_first_segment_start = None
 	job.transcription_bad_timestamp_count = 0
+	job.transcription_language_probability = None
+	job.transcription_keyterms_used = None
+	job.transcription_provider_warning = None
 	job.save(ignore_permissions=True)
 	frappe.enqueue(
 		"audio_stem.workers.transcription_worker.process_transcription",
@@ -121,6 +142,12 @@ def enqueue_transcription(job, *, source: str, language: str | None = None, prom
 		source=source,
 		language=language,
 		prompt=prompt,
+		provider=provider,
+		scribe_model=scribe_model,
+		keyterms=keyterms,
+		no_verbatim=no_verbatim,
+		tag_audio_events=tag_audio_events,
+		diarize=diarize,
 	)
 
 

@@ -619,20 +619,37 @@ function AudioStemWorkspace({ currentUser, settings: initialSettings }) {
 		}
 	};
 
-	const handleTranscription = async (name, source, language, prompt) => {
+	const handleTranscription = async ({
+		jobName,
+		source,
+		language,
+		prompt,
+		provider,
+		scribeModel,
+		keyterms,
+		noVerbatim,
+		tagAudioEvents,
+		diarize,
+	}) => {
 		if (transcribing) return;
 		setTranscribing(true);
 		setError(null);
 		try {
 			const result = unwrapFrappeMessage(
 				await startTranscription({
-					job_name: name,
+					job_name: jobName,
 					source,
 					language: language || undefined,
 					prompt: prompt || undefined,
+					provider: provider || undefined,
+					scribe_model: scribeModel || undefined,
+					keyterms: keyterms || undefined,
+					no_verbatim: noVerbatim,
+					tag_audio_events: tagAudioEvents,
+					diarize: diarize,
 				})
 			);
-			setJobName(name);
+			setJobName(jobName);
 			setJob(result);
 			await fetchJobDetail();
 		} catch (err) {

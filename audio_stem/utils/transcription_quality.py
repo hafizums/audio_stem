@@ -31,6 +31,12 @@ LANGUAGE_ALIASES = {
 	"english": "en",
 	"indonesian": "id",
 }
+LANGUAGE_EQUIVALENCE = {
+	"ms": {"ms", "msa", "malay"},
+	"en": {"en", "eng", "english"},
+	"id": {"id", "ind", "indonesian"},
+	"jv": {"jv", "jav", "javanese"},
+}
 UNRELIABLE_TRANSCRIPT_WARNING = _(
 	"Transcript may be incomplete or unreliable. Try setting the language, using Vocal source, or correcting lyrics manually."
 )
@@ -178,6 +184,29 @@ def normalize_detected_language(language: str | None) -> str | None:
 	return LANGUAGE_ALIASES.get(normalized, normalized)
 
 
+def _language_equivalence_tokens(language: str | None) -> set[str]:
+	normalized = normalize_detected_language(language)
+	if not normalized:
+		return set()
+	tokens = {normalized}
+	for canonical, aliases in LANGUAGE_EQUIVALENCE.items():
+		if normalized == canonical or normalized in aliases:
+			tokens.add(canonical)
+			tokens.update(aliases)
+	return tokens
+
+
+def has_requested_language_mismatch(
+	requested_language: str | None,
+	detected_language: str | None,
+) -> bool:
+	requested = _language_equivalence_tokens(requested_language)
+	detected = _language_equivalence_tokens(detected_language)
+	if not requested or not detected:
+		return False
+	return requested.isdisjoint(detected)
+
+
 def get_first_segment_start(segments: list[dict]) -> float | None:
 	starts = [flt(segment.get("start")) for segment in segments if segment.get("start") is not None]
 	if not starts:
@@ -203,17 +232,6 @@ def has_suspicious_start_gap(duration_seconds: float, first_segment_start: float
 	if duration_seconds >= 120 and first_segment_start >= duration_seconds * START_GAP_RATIO:
 		return True
 	return False
-
-
-def has_requested_language_mismatch(
-	requested_language: str | None,
-	detected_language: str | None,
-) -> bool:
-	requested = normalize_detected_language(requested_language)
-	detected = normalize_detected_language(detected_language)
-	if not requested or not detected:
-		return False
-	return requested != detected
 
 
 def compute_transcription_quality_diagnostics(
@@ -250,6 +268,7 @@ def compute_transcription_quality_diagnostics(
 	language_mismatch = has_requested_language_mismatch(requested_language, detected_language)
 	has_bad_timestamps = bad_timestamp_count > 0
 	prompt_echo_detected = detect_prompt_echo(transcript_data.get("text"))
+	missing_word_timestamps = bool((text := (transcript_data.get("text") or "").strip()) or segments) and not has_word_timestamps
 
 	quality_unreliable = any(
 		[
@@ -259,6 +278,7 @@ def compute_transcription_quality_diagnostics(
 			low_confidence_warning,
 			language_mismatch,
 			prompt_echo_detected,
+			missing_word_timestamps,
 		]
 	)
 
@@ -278,6 +298,7 @@ def compute_transcription_quality_diagnostics(
 		"suspicious_start_gap": suspicious_start_gap,
 		"language_mismatch": language_mismatch,
 		"prompt_echo_detected": prompt_echo_detected,
+		"missing_word_timestamps": missing_word_timestamps,
 		"transcription_quality_unreliable": quality_unreliable,
 		"transcription_quality_warning": UNRELIABLE_TRANSCRIPT_WARNING if quality_unreliable else None,
 	}

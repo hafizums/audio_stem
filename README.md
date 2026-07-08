@@ -849,6 +849,38 @@ Whisper is a **draft** for karaoke lyrics, not a final lyric sheet. For 3-minute
 8. Compare results.
 9. Correct final lyrics in the manual editor.
 
+### Transcription Providers
+
+OpenAI **Whisper** remains the default provider. **ElevenLabs Scribe** (`scribe_v1` / `scribe_v2`) can be enabled as an alternative for song transcription.
+
+| Setting | Purpose |
+| --- | --- |
+| `transcription_provider` | Site default: `OpenAI Whisper` or `ElevenLabs Scribe` |
+| `elevenlabs_scribe_enabled` | Enable ElevenLabs Scribe |
+| `elevenlabs_scribe_model` | `scribe_v2` (default) or `scribe_v1` |
+| `elevenlabs_language_code` | Optional default language code |
+| `elevenlabs_use_keyterms` / `elevenlabs_keyterms` | Song-specific vocabulary hints |
+| `elevenlabs_cost_per_hour_usd` | Cost estimate for Scribe |
+
+**Karaoke workflow unchanged:** both providers normalize to the same transcript JSON/SRT/VTT shape used by Edit Lyrics and `karaoke_engine`.
+
+**When Whisper struggles on local-language songs:**
+
+1. Switch provider to **ElevenLabs Scribe** (v2 recommended)
+2. Use **Vocal** source
+3. Set language code (`ms`, `en`, `msa`, etc.)
+4. Add **keyterms** from chorus phrases, names, or local words
+5. Use **Edit Lyrics** for final karaoke-ready output
+
+**Manual test**
+
+1. Configure ElevenLabs API key in Audio Separation Settings
+2. Set `transcription_provider = ElevenLabs Scribe`
+3. Complete separation on a song
+4. Transcribe from Vocal with keyterms
+5. Confirm provider/model, word timestamps, JSON/SRT/VTT
+6. Generate ASS/MP4 as usual
+
 ### Run tests
 
 See the **Run tests** section near the top of this README for the recommended `audio-stem-test.local` workflow, settings snapshot/restore behavior, and cleanup guarantees.

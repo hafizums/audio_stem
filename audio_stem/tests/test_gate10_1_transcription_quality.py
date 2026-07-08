@@ -327,7 +327,7 @@ class TestGate101TranscriptionQuality(AudioStemTestCase):
 			"audio_stem.workers.transcription_worker.prepare_audio_for_whisper",
 			return_value=(temp_path, False),
 		), patch(
-			"audio_stem.workers.transcription_worker.transcribe_with_whisper",
+			"audio_stem.workers.transcription_worker.transcribe_audio",
 			return_value=SAMPLE_TRANSCRIPT,
 		):
 			process_transcription(job.name, source="Vocal", language="en")

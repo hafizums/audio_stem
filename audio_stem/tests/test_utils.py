@@ -18,7 +18,7 @@ TEST_AUDIO_STEM_MARKER = "TEST_AUDIO_STEM"
 TEST_FILE_PREFIX = "test_audio_stem_"
 TEST_USER_EMAIL_SUFFIX = "@audio-stem-test.example"
 
-PASSWORD_FIELDS = frozenset({"wavespeed_api_key", "openai_api_key"})
+PASSWORD_FIELDS = frozenset({"wavespeed_api_key", "openai_api_key", "elevenlabs_api_key"})
 SKIP_RESTORE_FIELDS = frozenset(
 	{
 		"name",

@@ -230,20 +230,80 @@ def get_configuration_checklist_data() -> list[dict]:
 		)
 	)
 
-	if cint(settings.openai_enabled):
-		openai_key = (settings.get_password("openai_api_key", raise_exception=False) or "").strip()
-		if openai_key:
-			items.append(_item("openai_api_key", _("OpenAI API Key"), "ok", _("OpenAI API key is configured.")))
-		else:
-			items.append(_item("openai_api_key", _("OpenAI API Key"), "error", _("OpenAI API key is missing.")))
-		items.append(
-			_item(
-				"openai_enabled",
-				_("OpenAI Transcription"),
-				"ok",
-				_("OpenAI transcription is enabled (model: {0}).").format(settings.transcription_model or "whisper-1"),
-			)
+	from audio_stem.integrations.elevenlabs_scribe_client import is_elevenlabs_scribe_enabled, resolve_scribe_model
+	from audio_stem.integrations.openai_transcription_client import is_openai_transcription_enabled
+	from audio_stem.integrations.transcription_provider import (
+		PROVIDER_ELEVENLABS,
+		PROVIDER_OPENAI,
+		get_transcription_provider,
+		is_transcription_provider_configured,
+	)
+	from audio_stem.utils.scribe_keyterms import parse_keyterms, validate_keyterms
+
+	selected_provider = get_transcription_provider(settings)
+	items.append(
+		_item(
+			"transcription_provider",
+			_("Transcription Provider"),
+			"ok" if selected_provider in (PROVIDER_OPENAI, PROVIDER_ELEVENLABS) else "warning",
+			_("Site transcription provider: {0}.").format(selected_provider),
 		)
+	)
+
+	if selected_provider == PROVIDER_OPENAI:
+		if is_transcription_provider_configured(PROVIDER_OPENAI, settings):
+			items.append(_item("openai_api_key", _("OpenAI API Key"), "ok", _("OpenAI API key is configured.")))
+			items.append(
+				_item(
+					"openai_enabled",
+					_("OpenAI Transcription"),
+					"ok",
+					_("OpenAI transcription is enabled (model: {0}).").format(settings.transcription_model or "whisper-1"),
+				)
+			)
+		else:
+			openai_key = (settings.get_password("openai_api_key", raise_exception=False) or "").strip()
+			if not openai_key:
+				items.append(_item("openai_api_key", _("OpenAI API Key"), "error", _("OpenAI API key is missing.")))
+			items.append(
+				_item("openai_enabled", _("OpenAI Transcription"), "error", _("OpenAI transcription is not ready."))
+			)
+	elif selected_provider == PROVIDER_ELEVENLABS:
+		if is_transcription_provider_configured(PROVIDER_ELEVENLABS, settings):
+			items.append(
+				_item("elevenlabs_api_key", _("ElevenLabs API Key"), "ok", _("ElevenLabs API key is configured."))
+			)
+			model = resolve_scribe_model(settings.elevenlabs_scribe_model, settings)
+			items.append(
+				_item(
+					"elevenlabs_scribe_enabled",
+					_("ElevenLabs Scribe"),
+					"ok",
+					_("ElevenLabs Scribe is enabled (model: {0}).").format(model),
+				)
+			)
+			if cint(settings.elevenlabs_use_keyterms):
+				try:
+					validate_keyterms(parse_keyterms(settings.elevenlabs_keyterms))
+					items.append(_item("elevenlabs_keyterms", _("ElevenLabs Keyterms"), "ok", _("Keyterms are valid.")))
+				except Exception as exc:
+					items.append(_item("elevenlabs_keyterms", _("ElevenLabs Keyterms"), "error", str(exc)))
+		else:
+			elevenlabs_key = (settings.get_password("elevenlabs_api_key", raise_exception=False) or "").strip()
+			if not elevenlabs_key:
+				items.append(
+					_item("elevenlabs_api_key", _("ElevenLabs API Key"), "error", _("ElevenLabs API key is missing."))
+				)
+			items.append(
+				_item(
+					"elevenlabs_scribe_enabled",
+					_("ElevenLabs Scribe"),
+					"error",
+					_("ElevenLabs Scribe is not ready."),
+				)
+			)
+
+	if is_openai_transcription_enabled() or is_elevenlabs_scribe_enabled():
 		items.append(
 			_item(
 				"word_timestamps",
@@ -257,7 +317,7 @@ def get_configuration_checklist_data() -> list[dict]:
 				"manual_transcript_correction",
 				_("Manual Transcript Correction"),
 				"ok",
-				_("Manual transcript correction is available after Whisper transcription."),
+				_("Manual transcript correction is available after transcription."),
 			)
 		)
 		max_words = cint(settings.subtitle_max_words_per_line) or cint(settings.karaoke_max_words_per_line)
@@ -281,7 +341,7 @@ def get_configuration_checklist_data() -> list[dict]:
 			)
 	else:
 		items.append(
-			_item("openai_enabled", _("OpenAI Transcription"), "warning", _("OpenAI transcription is disabled."))
+			_item("transcription_enabled", _("Transcription"), "warning", _("No transcription provider is enabled."))
 		)
 
 	if cint(settings.karaoke_enabled):

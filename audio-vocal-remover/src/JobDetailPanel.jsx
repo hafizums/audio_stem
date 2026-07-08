@@ -174,8 +174,24 @@ function TranscribeTab({
 		job.default_transcription_language || settings?.default_transcription_language || ""
 	);
 	const [transcriptionPrompt, setTranscriptionPrompt] = useState("");
+	const [transcriptionProvider, setTranscriptionProvider] = useState(
+		settings?.transcription_provider || job.site_transcription_provider || "OpenAI Whisper"
+	);
+	const [scribeModel, setScribeModel] = useState(settings?.elevenlabs_scribe_model || "scribe_v2");
+	const [scribeKeyterms, setScribeKeyterms] = useState("");
+	const [scribeNoVerbatim, setScribeNoVerbatim] = useState(false);
+	const [scribeTagAudioEvents, setScribeTagAudioEvents] = useState(
+		Boolean(settings?.elevenlabs_tag_audio_events)
+	);
+	const [scribeDiarize, setScribeDiarize] = useState(Boolean(settings?.elevenlabs_diarize));
 
-	const openaiEnabled = job.openai_enabled || settings?.openai_enabled;
+	const isOpenAiProvider = transcriptionProvider === "OpenAI Whisper";
+	const isScribeProvider = transcriptionProvider === "ElevenLabs Scribe";
+	const providerAvailable =
+		(isOpenAiProvider && (job.openai_provider_available || settings?.openai_provider_available)) ||
+		(isScribeProvider && (job.elevenlabs_provider_available || settings?.elevenlabs_provider_available));
+	const transcriptionEnabled =
+		job.transcription_enabled || settings?.transcription_enabled || providerAvailable;
 	const promptEnabled = settings?.transcription_prompt_enabled !== false;
 	const vocalTranscriptionBlocked =
 		job.is_active || job.status !== "Completed" || !job.has_vocal;
@@ -185,7 +201,7 @@ function TranscribeTab({
 		!job.is_transcription_active &&
 		(job.transcription_status === "Completed" || job.transcription_quality_unreliable);
 	const transcriptionDisabled =
-		!openaiEnabled ||
+		!providerAvailable ||
 		(!job.can_start_transcription && !canRetryTranscription) ||
 		transcribing ||
 		job.is_transcription_active ||
@@ -200,11 +216,11 @@ function TranscribeTab({
 		);
 	}
 
-	if (!openaiEnabled) {
+	if (!transcriptionEnabled && !providerAvailable) {
 		return (
 			<LockedTab
 				title="Transcription is disabled"
-				message="OpenAI transcription is not enabled for this site."
+				message="Configure OpenAI Whisper or ElevenLabs Scribe in Audio Separation Settings."
 			/>
 		);
 	}
@@ -214,7 +230,7 @@ function TranscribeTab({
 			{job.is_transcription_active && (
 				<ProcessingNotice
 					job={job}
-					statusMessage="Transcribing lyrics with Whisper. This usually takes a minute."
+					statusMessage={`Transcribing lyrics with ${isScribeProvider ? "ElevenLabs Scribe" : "Whisper"}. This usually takes a minute.`}
 				/>
 			)}
 			{job.transcription_status === "Completed" && (
@@ -243,14 +259,19 @@ function TranscribeTab({
 									{job.transcription_bad_timestamp_count} word timestamps look invalid
 								</li>
 							)}
+							{job.transcription_language_probability > 0 && (
+								<li>
+									Language confidence: {(job.transcription_language_probability * 100).toFixed(0)}%
+								</li>
+							)}
 						</ul>
 					)}
 				</div>
 			)}
 
 			<p className="text-sm text-gray-600">
-				For songs, Whisper may produce rough lyrics. Use the <strong>Edit Lyrics</strong> tab to
-				correct wording and timing.
+				For songs, automatic transcription may produce rough lyrics. Use the <strong>Edit Lyrics</strong>{" "}
+				tab to correct wording and timing. Scribe may perform better on some songs and languages.
 			</p>
 
 			<Card title="Run transcription">
@@ -266,8 +287,26 @@ function TranscribeTab({
 							{job.transcription_word_count} words · {job.transcription_segment_count} segments
 						</span>
 					)}
+					{job.transcription_provider && (
+						<span className="text-xs text-gray-500">
+							{job.transcription_provider}
+							{job.transcription_provider_model ? ` · ${job.transcription_provider_model}` : ""}
+						</span>
+					)}
 				</div>
 				<div className="grid gap-3 sm:grid-cols-2">
+					<label className="text-sm text-gray-700">
+						Provider
+						<select
+							className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+							value={transcriptionProvider}
+							onChange={(e) => setTranscriptionProvider(e.target.value)}
+							disabled={transcribing || job.is_transcription_active}
+						>
+							<option value="OpenAI Whisper">OpenAI Whisper</option>
+							<option value="ElevenLabs Scribe">ElevenLabs Scribe</option>
+						</select>
+					</label>
 					<label className="text-sm text-gray-700">
 						Source
 						<select
@@ -294,11 +333,13 @@ function TranscribeTab({
 							disabled={transcribing || job.is_transcription_active}
 						/>
 						<span className="mt-1 block text-xs text-gray-500">
-							ISO-639-1 code helps Whisper for mixed Malay/English songs.
+							{isScribeProvider
+								? "Language code helps Scribe (e.g. ms, en, msa)."
+								: "ISO-639-1 code helps Whisper for mixed Malay/English songs."}
 						</span>
 					</label>
 				</div>
-				{promptEnabled && (
+				{isOpenAiProvider && promptEnabled && (
 					<label className="mt-3 block text-sm text-gray-700">
 						Style primer (optional)
 						<textarea
@@ -314,16 +355,81 @@ function TranscribeTab({
 						</span>
 					</label>
 				)}
+				{isScribeProvider && (
+					<div className="mt-3 space-y-3">
+						<label className="block text-sm text-gray-700">
+							Scribe model
+							<select
+								className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+								value={scribeModel}
+								onChange={(e) => setScribeModel(e.target.value)}
+								disabled={transcribing || job.is_transcription_active}
+							>
+								<option value="scribe_v2">scribe_v2</option>
+								<option value="scribe_v1">scribe_v1</option>
+							</select>
+						</label>
+						<label className="block text-sm text-gray-700">
+							Keyterms (optional)
+							<textarea
+								className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+								rows={3}
+								value={scribeKeyterms}
+								onChange={(e) => setScribeKeyterms(e.target.value)}
+								placeholder="One term per line: chorus phrase, place name, local words"
+								disabled={transcribing || job.is_transcription_active}
+							/>
+							<span className="mt-1 block text-xs text-gray-500">
+								Keyterms can help with local words or chorus phrases. Do not paste secrets.
+							</span>
+						</label>
+						<div className="flex flex-wrap gap-4 text-sm text-gray-700">
+							<label className="inline-flex items-center gap-2">
+								<input
+									type="checkbox"
+									checked={scribeNoVerbatim}
+									onChange={(e) => setScribeNoVerbatim(e.target.checked)}
+									disabled={transcribing || job.is_transcription_active}
+								/>
+								No verbatim
+							</label>
+							<label className="inline-flex items-center gap-2">
+								<input
+									type="checkbox"
+									checked={scribeTagAudioEvents}
+									onChange={(e) => setScribeTagAudioEvents(e.target.checked)}
+									disabled={transcribing || job.is_transcription_active}
+								/>
+								Tag audio events
+							</label>
+							<label className="inline-flex items-center gap-2">
+								<input
+									type="checkbox"
+									checked={scribeDiarize}
+									onChange={(e) => setScribeDiarize(e.target.checked)}
+									disabled={transcribing || job.is_transcription_active}
+								/>
+								Diarize
+							</label>
+						</div>
+					</div>
+				)}
 				<div className="mt-3 flex flex-wrap gap-2">
 					<PrimaryButton
 						disabled={transcriptionDisabled}
 						onClick={() =>
-							onTranscription(
-								job.name,
-								transcriptionSource,
-								transcriptionLanguage,
-								transcriptionPrompt.trim() || undefined
-							)
+							onTranscription({
+								jobName: job.name,
+								source: transcriptionSource,
+								language: transcriptionLanguage,
+								prompt: isOpenAiProvider ? transcriptionPrompt.trim() || undefined : undefined,
+								provider: transcriptionProvider,
+								scribeModel: isScribeProvider ? scribeModel : undefined,
+								keyterms: isScribeProvider ? scribeKeyterms.trim() || undefined : undefined,
+								noVerbatim: isScribeProvider ? (scribeNoVerbatim ? 1 : 0) : undefined,
+								tagAudioEvents: isScribeProvider ? (scribeTagAudioEvents ? 1 : 0) : undefined,
+								diarize: isScribeProvider ? (scribeDiarize ? 1 : 0) : undefined,
+							})
 						}
 					>
 						{transcribing || job.is_transcription_active

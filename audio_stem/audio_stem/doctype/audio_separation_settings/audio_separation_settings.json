@@ -39,6 +39,7 @@
   "daily_failed_job_limit_per_user",
   "stuck_job_threshold_minutes",
   "section_break_openai",
+  "transcription_provider",
   "openai_enabled",
   "openai_api_key",
   "transcription_model",
@@ -63,6 +64,20 @@
   "transcription_chunk_seconds",
   "transcription_chunk_overlap_seconds",
   "transcription_force_language",
+  "section_break_elevenlabs_scribe",
+  "elevenlabs_scribe_enabled",
+  "elevenlabs_api_key",
+  "elevenlabs_scribe_model",
+  "elevenlabs_language_code",
+  "elevenlabs_use_keyterms",
+  "elevenlabs_keyterms",
+  "elevenlabs_no_verbatim",
+  "elevenlabs_tag_audio_events",
+  "elevenlabs_diarize",
+  "elevenlabs_temperature",
+  "elevenlabs_timeout_seconds",
+  "elevenlabs_cost_per_hour_usd",
+  "elevenlabs_keyterm_cost_per_hour_usd",
   "section_break_karaoke",
   "karaoke_enabled",
   "karaoke_ass_enabled",
@@ -313,6 +328,13 @@
    "label": "OpenAI Transcription"
   },
   {
+   "default": "OpenAI Whisper",
+   "fieldname": "transcription_provider",
+   "fieldtype": "Select",
+   "label": "Transcription Provider",
+   "options": "OpenAI Whisper\nElevenLabs Scribe"
+  },
+  {
    "default": "0",
    "fieldname": "openai_enabled",
    "fieldtype": "Check",
@@ -461,6 +483,89 @@
    "fieldname": "transcription_force_language",
    "fieldtype": "Data",
    "label": "Transcription Force Language"
+  },
+  {
+   "fieldname": "section_break_elevenlabs_scribe",
+   "fieldtype": "Section Break",
+   "label": "ElevenLabs Scribe"
+  },
+  {
+   "default": "0",
+   "fieldname": "elevenlabs_scribe_enabled",
+   "fieldtype": "Check",
+   "label": "ElevenLabs Scribe Enabled"
+  },
+  {
+   "fieldname": "elevenlabs_api_key",
+   "fieldtype": "Password",
+   "label": "ElevenLabs API Key"
+  },
+  {
+   "default": "scribe_v2",
+   "fieldname": "elevenlabs_scribe_model",
+   "fieldtype": "Select",
+   "label": "ElevenLabs Scribe Model",
+   "options": "scribe_v2\nscribe_v1"
+  },
+  {
+   "fieldname": "elevenlabs_language_code",
+   "fieldtype": "Data",
+   "label": "ElevenLabs Language Code"
+  },
+  {
+   "default": "0",
+   "fieldname": "elevenlabs_use_keyterms",
+   "fieldtype": "Check",
+   "label": "ElevenLabs Use Keyterms"
+  },
+  {
+   "fieldname": "elevenlabs_keyterms",
+   "fieldtype": "Long Text",
+   "label": "ElevenLabs Keyterms"
+  },
+  {
+   "default": "0",
+   "fieldname": "elevenlabs_no_verbatim",
+   "fieldtype": "Check",
+   "label": "ElevenLabs No Verbatim"
+  },
+  {
+   "default": "0",
+   "fieldname": "elevenlabs_tag_audio_events",
+   "fieldtype": "Check",
+   "label": "ElevenLabs Tag Audio Events"
+  },
+  {
+   "default": "0",
+   "fieldname": "elevenlabs_diarize",
+   "fieldtype": "Check",
+   "label": "ElevenLabs Diarize"
+  },
+  {
+   "fieldname": "elevenlabs_temperature",
+   "fieldtype": "Float",
+   "label": "ElevenLabs Temperature"
+  },
+  {
+   "default": "900",
+   "fieldname": "elevenlabs_timeout_seconds",
+   "fieldtype": "Int",
+   "label": "ElevenLabs Timeout Seconds",
+   "non_negative": 1
+  },
+  {
+   "default": "0.22",
+   "fieldname": "elevenlabs_cost_per_hour_usd",
+   "fieldtype": "Currency",
+   "label": "ElevenLabs Cost Per Hour (USD)",
+   "non_negative": 1
+  },
+  {
+   "default": "0.05",
+   "fieldname": "elevenlabs_keyterm_cost_per_hour_usd",
+   "fieldtype": "Currency",
+   "label": "ElevenLabs Keyterm Cost Per Hour (USD)",
+   "non_negative": 1
   },
   {
    "fieldname": "section_break_karaoke",

@@ -1,8 +1,21 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import {
+	Card,
+	SafeErrorNotice,
+	SecondaryButton,
+	StatusBadge,
+} from "./components/ui";
 import { parseFrappeError } from "./utils";
 
 function cloneTranscript(transcript) {
 	return JSON.parse(JSON.stringify(transcript || {}));
+}
+
+function formatTimestamp(seconds) {
+	const value = Math.max(0, Number(seconds) || 0);
+	const mins = Math.floor(value / 60);
+	const secs = value - mins * 60;
+	return `${mins}:${secs.toFixed(2).padStart(5, "0")}`;
 }
 
 function shiftTimings(transcript, shiftSeconds) {
@@ -96,104 +109,240 @@ function joinSegmentText(segments) {
 	return (segments || []).map((segment) => segment.text).join(" ").trim();
 }
 
-const SegmentRow = memo(function SegmentRow({
+function mapSegmentErrors(errors) {
+	const map = new Map();
+	for (const error of errors) {
+		const match = error.match(/Segment (\d+)/);
+		if (!match) continue;
+		const index = Number(match[1]) - 1;
+		if (!map.has(index)) map.set(index, []);
+		map.get(index).push(error);
+	}
+	return map;
+}
+
+function countWords(transcript) {
+	return (transcript?.segments || []).reduce(
+		(total, segment) => total + (segment.words?.length || 0),
+		0
+	);
+}
+
+function transcriptDuration(transcript, fallback = 0) {
+	const segmentEnds = (transcript?.segments || []).map((segment) => Number(segment.end || 0));
+	const maxEnd = segmentEnds.length ? Math.max(...segmentEnds) : 0;
+	return maxEnd || Number(fallback || 0);
+}
+
+function ManualStatusBadge({ status }) {
+	const styles = {
+		"Not Started": "bg-gray-100 text-gray-700 ring-gray-200",
+		Draft: "bg-amber-100 text-amber-900 ring-amber-200",
+		Saved: "bg-blue-100 text-blue-900 ring-blue-200",
+		Approved: "bg-green-100 text-green-900 ring-green-200",
+	};
+	return (
+		<span
+			className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
+				styles[status] || styles["Not Started"]
+			}`}
+		>
+			{status}
+		</span>
+	);
+}
+
+function EditorSkeleton() {
+	return (
+		<div className="space-y-3 animate-pulse">
+			<div className="h-10 rounded-lg bg-gray-100" />
+			<div className="h-8 rounded-lg bg-gray-100" />
+			{[1, 2, 3].map((item) => (
+				<div key={item} className="h-24 rounded-xl bg-gray-100" />
+			))}
+		</div>
+	);
+}
+
+function SegmentTimeline({ segments, duration, activeIndex, onSelect }) {
+	const total = Math.max(duration, 1);
+	return (
+		<div className="relative h-9 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+			{(segments || []).map((segment, index) => {
+				const start = Number(segment.start || 0);
+				const end = Number(segment.end || start);
+				const left = (start / total) * 100;
+				const width = Math.max(((end - start) / total) * 100, 0.6);
+				const isActive = activeIndex === index;
+				return (
+					<button
+						key={`timeline-${index}`}
+						type="button"
+						title={`Line ${index + 1}: ${segment.text || ""}`}
+						onClick={() => onSelect(index)}
+						className={`absolute top-0 h-full border-r border-white/70 transition ${
+							isActive
+								? "bg-purple-500 ring-2 ring-purple-400 ring-offset-1"
+								: "bg-purple-300/80 hover:bg-purple-400/90"
+						}`}
+						style={{ left: `${left}%`, width: `${width}%` }}
+					/>
+				);
+			})}
+		</div>
+	);
+}
+
+const SegmentCard = memo(function SegmentCard({
 	segment,
 	index,
 	disabled,
 	saving,
 	expanded,
 	advancedMode,
+	errors,
 	onToggleWords,
 	onUpdateSegment,
 	onUpdateWord,
+	onFocus,
+	cardRef,
 }) {
+	const hasErrors = errors?.length > 0;
+	const wordCount = (segment.words || []).length;
+
 	return (
-		<tr>
-			<td className="px-2 py-2 align-top">
-				<input
-					type="number"
-					step="0.01"
-					className="w-24 rounded border border-gray-300 px-1 py-1"
-					value={segment.start ?? 0}
-					onChange={(event) => onUpdateSegment(index, "start", Number(event.target.value))}
-					disabled={disabled || saving}
-				/>
-			</td>
-			<td className="px-2 py-2 align-top">
-				<input
-					type="number"
-					step="0.01"
-					className="w-24 rounded border border-gray-300 px-1 py-1"
-					value={segment.end ?? 0}
-					onChange={(event) => onUpdateSegment(index, "end", Number(event.target.value))}
-					disabled={disabled || saving}
-				/>
-			</td>
-			<td className="px-2 py-2 align-top">
-				<input
-					type="text"
-					className="w-full min-w-40 rounded border border-gray-300 px-1 py-1"
-					value={segment.text || ""}
-					onChange={(event) => onUpdateSegment(index, "text", event.target.value)}
-					disabled={disabled || saving}
-				/>
-			</td>
-			<td className="px-2 py-2 align-top">
-				{advancedMode ? (
-					<>
-						<button
-							type="button"
-							className="text-xs text-blue-600 hover:underline"
-							onClick={() => onToggleWords(index)}
-						>
-							{expanded ? "Hide" : "Edit"} words
-						</button>
-						{expanded && (
-							<div className="mt-2 space-y-2">
-								{(segment.words || []).map((word, wordIndex) => (
-									<div
-										key={`word-${index}-${wordIndex}`}
-										className="grid gap-1 rounded border border-gray-100 p-2 sm:grid-cols-4"
-									>
-										<input
-											type="text"
-											className="rounded border border-gray-300 px-1 py-1 text-xs"
-											value={word.text || ""}
-											onChange={(event) =>
-												onUpdateWord(index, wordIndex, "text", event.target.value)
-											}
-											disabled={disabled || saving}
-										/>
-										<input
-											type="number"
-											step="0.01"
-											className="rounded border border-gray-300 px-1 py-1 text-xs"
-											value={word.start ?? 0}
-											onChange={(event) =>
-												onUpdateWord(index, wordIndex, "start", Number(event.target.value))
-											}
-											disabled={disabled || saving}
-										/>
-										<input
-											type="number"
-											step="0.01"
-											className="rounded border border-gray-300 px-1 py-1 text-xs"
-											value={word.end ?? 0}
-											onChange={(event) =>
-												onUpdateWord(index, wordIndex, "end", Number(event.target.value))
-											}
-											disabled={disabled || saving}
-										/>
-									</div>
-								))}
+		<article
+			ref={cardRef}
+			className={`rounded-xl border bg-white p-4 shadow-sm transition ${
+				hasErrors
+					? "border-amber-300 ring-1 ring-amber-200"
+					: "border-gray-200 hover:border-purple-200"
+			}`}
+		>
+			<div className="flex items-start gap-3">
+				<div
+					className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+						hasErrors ? "bg-amber-100 text-amber-900" : "bg-purple-50 text-purple-700"
+					}`}
+				>
+					{index + 1}
+				</div>
+
+				<div className="min-w-0 flex-1 space-y-3">
+					<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+						<span className="font-medium text-gray-700">
+							{formatTimestamp(segment.start)} – {formatTimestamp(segment.end)}
+						</span>
+						<span>{wordCount} word{wordCount === 1 ? "" : "s"}</span>
+						{advancedMode && (
+							<div className="flex flex-wrap items-center gap-2">
+								<label className="inline-flex items-center gap-1">
+									<span>Start</span>
+									<input
+										type="number"
+										step="0.01"
+										className="w-20 rounded-md border border-gray-300 px-2 py-1 text-xs"
+										value={segment.start ?? 0}
+										onChange={(event) =>
+											onUpdateSegment(index, "start", Number(event.target.value))
+										}
+										disabled={disabled || saving}
+									/>
+								</label>
+								<label className="inline-flex items-center gap-1">
+									<span>End</span>
+									<input
+										type="number"
+										step="0.01"
+										className="w-20 rounded-md border border-gray-300 px-2 py-1 text-xs"
+										value={segment.end ?? 0}
+										onChange={(event) =>
+											onUpdateSegment(index, "end", Number(event.target.value))
+										}
+										disabled={disabled || saving}
+									/>
+								</label>
 							</div>
 						)}
-					</>
-				) : (
-					<span className="text-xs text-gray-400">{(segment.words || []).length} words</span>
-				)}
-			</td>
-		</tr>
+					</div>
+
+					<textarea
+						rows={Math.min(4, Math.max(2, Math.ceil((segment.text || "").length / 48)))}
+						className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm leading-relaxed text-gray-900 placeholder:text-gray-400 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-100 disabled:bg-gray-50"
+						value={segment.text || ""}
+						placeholder="Lyric line..."
+						onChange={(event) => onUpdateSegment(index, "text", event.target.value)}
+						onFocus={onFocus}
+						disabled={disabled || saving}
+					/>
+
+					{hasErrors && (
+						<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+							{errors.map((error) => (
+								<p key={error}>{error}</p>
+							))}
+						</div>
+					)}
+
+					{advancedMode && wordCount > 0 && (
+						<div className="border-t border-gray-100 pt-3">
+							<button
+								type="button"
+								className="text-xs font-medium text-purple-700 hover:text-purple-900"
+								onClick={() => onToggleWords(index)}
+							>
+								{expanded ? "Hide word timing" : "Edit word timing"}
+							</button>
+							{expanded && (
+								<div className="mt-3 space-y-2">
+									<div className="hidden gap-2 px-1 text-[11px] font-medium uppercase tracking-wide text-gray-400 sm:grid sm:grid-cols-[1fr_5rem_5rem]">
+										<span>Word</span>
+										<span>Start</span>
+										<span>End</span>
+									</div>
+									{(segment.words || []).map((word, wordIndex) => (
+										<div
+											key={`word-${index}-${wordIndex}`}
+											className="grid gap-2 rounded-lg border border-gray-100 bg-gray-50 p-2 sm:grid-cols-[1fr_5rem_5rem]"
+										>
+											<input
+												type="text"
+												className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm"
+												value={word.text || ""}
+												onChange={(event) =>
+													onUpdateWord(index, wordIndex, "text", event.target.value)
+												}
+												disabled={disabled || saving}
+											/>
+											<input
+												type="number"
+												step="0.01"
+												className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm"
+												value={word.start ?? 0}
+												onChange={(event) =>
+													onUpdateWord(index, wordIndex, "start", Number(event.target.value))
+												}
+												disabled={disabled || saving}
+											/>
+											<input
+												type="number"
+												step="0.01"
+												className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm"
+												value={word.end ?? 0}
+												onChange={(event) =>
+													onUpdateWord(index, wordIndex, "end", Number(event.target.value))
+												}
+												disabled={disabled || saving}
+											/>
+										</div>
+									))}
+								</div>
+							)}
+						</div>
+					)}
+				</div>
+			</div>
+		</article>
 	);
 });
 
@@ -217,10 +366,13 @@ export default function TranscriptEditor({
 	const [expandedSegment, setExpandedSegment] = useState(null);
 	const [advancedMode, setAdvancedMode] = useState(false);
 	const [showFullTranscript, setShowFullTranscript] = useState(false);
+	const [searchQuery, setSearchQuery] = useState("");
+	const [activeSegment, setActiveSegment] = useState(0);
 	const [actionError, setActionError] = useState(null);
 
 	const loadedJobRef = useRef(null);
 	const onLoadRef = useRef(onLoad);
+	const segmentRefs = useRef({});
 	onLoadRef.current = onLoad;
 
 	const deferredTranscript = useDeferredValue(transcript);
@@ -228,9 +380,28 @@ export default function TranscriptEditor({
 		() => (deferredTranscript ? validateLocal(deferredTranscript, settings) : []),
 		[deferredTranscript, settings]
 	);
+	const segmentErrorMap = useMemo(() => mapSegmentErrors(localErrors), [localErrors]);
 
 	const manualStatus =
 		job?.manual_transcript_status || editorState?.manual_transcript_status || "Not Started";
+
+	const stats = useMemo(() => {
+		if (!transcript) return null;
+		return {
+			segments: (transcript.segments || []).length,
+			words: countWords(transcript),
+			duration: transcriptDuration(transcript, job?.duration_seconds),
+		};
+	}, [transcript, job?.duration_seconds]);
+
+	const visibleSegmentIndices = useMemo(() => {
+		const segments = transcript?.segments || [];
+		const query = searchQuery.trim().toLowerCase();
+		if (!query) return segments.map((_, index) => index);
+		return segments
+			.map((segment, index) => (segment.text?.toLowerCase().includes(query) ? index : -1))
+			.filter((index) => index >= 0);
+	}, [transcript, searchQuery]);
 
 	const fetchTranscript = useCallback(async (jobName, { force = false } = {}) => {
 		if (!jobName) return;
@@ -351,6 +522,14 @@ export default function TranscriptEditor({
 		setExpandedSegment((current) => (current === index ? null : index));
 	}, []);
 
+	const scrollToSegment = useCallback((index) => {
+		setActiveSegment(index);
+		const node = segmentRefs.current[index];
+		if (node?.scrollIntoView) {
+			node.scrollIntoView({ behavior: "smooth", block: "nearest" });
+		}
+	}, []);
+
 	const handleShift = () => {
 		setTranscript((current) => shiftTimings(current, shiftSeconds));
 	};
@@ -391,197 +570,280 @@ export default function TranscriptEditor({
 	}
 
 	const showInitialLoading = loading && !transcript;
+	const sourceLabel =
+		editorState?.source === "manual" ? "Manual corrections" : "Original transcription";
 
 	return (
-		<div className="space-y-3 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-			<div className="flex flex-wrap items-center justify-between gap-2">
-				<h3 className="text-sm font-semibold text-gray-900">Edit Lyrics</h3>
-				<span className="text-xs text-gray-500">Status: {manualStatus}</span>
-			</div>
-
-			{!job.can_edit_transcript && (
-				<p className="text-sm text-gray-500">
-					Transcript editing is unavailable while karaoke rendering is active.
+		<div className="space-y-4">
+			<Card
+				title="Edit Lyrics"
+				actions={<ManualStatusBadge status={manualStatus} />}
+			>
+				<p className="text-sm text-gray-600">
+					Fix lyric wording line by line. Approve when ready for karaoke — timing tools are
+					optional.
 				</p>
-			)}
+
+				{!job.can_edit_transcript && (
+					<p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+						Transcript editing is unavailable while karaoke rendering is active.
+					</p>
+				)}
+			</Card>
 
 			{job.can_edit_transcript && (
-				<div className="space-y-3">
+				<>
 					{showInitialLoading && (
-						<p className="text-sm text-gray-500">Loading transcript...</p>
+						<Card>
+							<EditorSkeleton />
+						</Card>
 					)}
-					{actionError && <p className="text-sm text-red-600">{actionError}</p>}
+
+					{actionError && <SafeErrorNotice message={actionError} />}
+
 					{localErrors.length > 0 && (
-						<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-							{localErrors.map((error) => (
-								<p key={error}>{error}</p>
-							))}
+						<div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+							<p className="font-medium">Fix timing issues before approving</p>
+							<ul className="mt-2 list-disc space-y-1 pl-5">
+								{localErrors.slice(0, 6).map((error) => (
+									<li key={error}>{error}</li>
+								))}
+							</ul>
+							{localErrors.length > 6 && (
+								<p className="mt-2 text-xs text-amber-800">
+									{localErrors.length - 6} more issue(s) not shown.
+								</p>
+							)}
 						</div>
 					)}
 
-				{transcript && (
-					<>
-						<div className="flex flex-wrap items-center justify-between gap-2">
-							<button
-								type="button"
-								className="text-xs text-blue-600 hover:underline"
-								onClick={() => setShowFullTranscript((v) => !v)}
-							>
-								{showFullTranscript ? "Hide full transcript" : "Show full transcript"}
-							</button>
-							<button
-								type="button"
-								className="text-xs text-blue-600 hover:underline"
-								onClick={() => setAdvancedMode((v) => !v)}
-								disabled={disabled || saving}
-							>
-								{advancedMode ? "Exit advanced timing editor" : "Advanced timing editor"}
-							</button>
-						</div>
-						{showFullTranscript && (
-							<label className="block text-sm text-gray-700">
-								Full transcript
-								<textarea
-									className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-									rows={3}
-									value={transcript.text || ""}
-									onChange={(event) =>
-										setTranscript((current) =>
-											current ? { ...current, text: event.target.value } : current
-										)
-									}
-									disabled={disabled || saving}
-								/>
-							</label>
-						)}
+					{transcript && (
+						<>
+							<Card title="Overview">
+								<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+									<div className="rounded-lg bg-gray-50 px-3 py-2">
+										<p className="text-xs text-gray-500">Source</p>
+										<p className="text-sm font-medium text-gray-900">{sourceLabel}</p>
+									</div>
+									<div className="rounded-lg bg-gray-50 px-3 py-2">
+										<p className="text-xs text-gray-500">Lines</p>
+										<p className="text-sm font-medium text-gray-900">{stats?.segments || 0}</p>
+									</div>
+									<div className="rounded-lg bg-gray-50 px-3 py-2">
+										<p className="text-xs text-gray-500">Words</p>
+										<p className="text-sm font-medium text-gray-900">{stats?.words || 0}</p>
+									</div>
+									<div className="rounded-lg bg-gray-50 px-3 py-2">
+										<p className="text-xs text-gray-500">Duration</p>
+										<p className="text-sm font-medium text-gray-900">
+											{formatTimestamp(stats?.duration || 0)}
+										</p>
+									</div>
+								</div>
 
-							<div className="flex flex-wrap items-end gap-2">
-								<label className="text-sm text-gray-700">
-									Shift all timings (seconds)
-									<input
-										type="number"
-										step="0.1"
-										className="mt-1 block w-32 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-										value={shiftSeconds}
-										onChange={(event) => setShiftSeconds(event.target.value)}
-										disabled={disabled || saving}
+								<div className="mt-4">
+									<div className="mb-2 flex items-center justify-between gap-2">
+										<p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+											Timeline
+										</p>
+										<p className="text-xs text-gray-400">Click a block to jump to a line</p>
+									</div>
+									<SegmentTimeline
+										segments={transcript.segments}
+										duration={stats?.duration}
+										activeIndex={activeSegment}
+										onSelect={scrollToSegment}
 									/>
-								</label>
-								<button
-									type="button"
-									className="rounded-md border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-									onClick={handleShift}
-									disabled={disabled || saving}
-								>
-									Apply Shift
-								</button>
-								<button
-									type="button"
-									className="rounded-md border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-									onClick={handleSnap}
-									disabled={disabled || saving}
-								>
-									Snap Overlaps
-								</button>
-							</div>
+								</div>
+							</Card>
 
-					<div className="overflow-x-auto rounded-md border border-gray-200 max-h-[420px]">
-						<table className="min-w-full divide-y divide-gray-200 text-sm">
-									<thead className="bg-gray-50">
-										<tr>
-											<th className="px-2 py-2 text-left font-medium text-gray-600">Start</th>
-											<th className="px-2 py-2 text-left font-medium text-gray-600">End</th>
-											<th className="px-2 py-2 text-left font-medium text-gray-600">Text</th>
-											<th className="px-2 py-2 text-left font-medium text-gray-600">Words</th>
-										</tr>
-									</thead>
-									<tbody className="divide-y divide-gray-100 bg-white">
-										{(transcript.segments || []).map((segment, index) => (
-										<SegmentRow
-											key={`segment-${index}`}
-											segment={segment}
-											index={index}
-											disabled={disabled}
-											saving={saving}
-											expanded={expandedSegment === index}
-											advancedMode={advancedMode}
-											onToggleWords={handleToggleWords}
-											onUpdateSegment={updateSegment}
-											onUpdateWord={updateWord}
+							<Card title="Tools">
+								<div className="flex flex-wrap items-end gap-3">
+									<label className="min-w-[12rem] flex-1 text-sm text-gray-700">
+										Search lyrics
+										<input
+											type="search"
+											placeholder="Find a line..."
+											className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-100"
+											value={searchQuery}
+											onChange={(event) => setSearchQuery(event.target.value)}
+											disabled={disabled || saving}
 										/>
-										))}
-									</tbody>
-								</table>
+									</label>
+									<label className="text-sm text-gray-700">
+										Shift all timings (s)
+										<input
+											type="number"
+											step="0.1"
+											className="mt-1 block w-28 rounded-md border border-gray-300 px-3 py-2 text-sm"
+											value={shiftSeconds}
+											onChange={(event) => setShiftSeconds(event.target.value)}
+											disabled={disabled || saving}
+										/>
+									</label>
+									<SecondaryButton disabled={disabled || saving} onClick={handleShift}>
+										Apply shift
+									</SecondaryButton>
+									<SecondaryButton disabled={disabled || saving} onClick={handleSnap}>
+										Snap overlaps
+									</SecondaryButton>
+								</div>
+
+								<div className="mt-4 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-4">
+									<button
+										type="button"
+										className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+											advancedMode
+												? "bg-purple-100 text-purple-800"
+												: "bg-gray-100 text-gray-700 hover:bg-gray-200"
+										}`}
+										onClick={() => setAdvancedMode((value) => !value)}
+										disabled={disabled || saving}
+									>
+										{advancedMode ? "Advanced timing on" : "Advanced timing off"}
+									</button>
+									<button
+										type="button"
+										className="text-xs font-medium text-purple-700 hover:text-purple-900"
+										onClick={() => setShowFullTranscript((value) => !value)}
+										disabled={disabled || saving}
+									>
+										{showFullTranscript ? "Hide full transcript" : "Show full transcript"}
+									</button>
+									{searchQuery && (
+										<span className="text-xs text-gray-500">
+											Showing {visibleSegmentIndices.length} of {stats?.segments || 0} lines
+										</span>
+									)}
+								</div>
+
+								{showFullTranscript && (
+									<label className="mt-4 block text-sm text-gray-700">
+										Full transcript
+										<textarea
+											className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm leading-relaxed"
+											rows={4}
+											value={transcript.text || ""}
+											onChange={(event) =>
+												setTranscript((current) =>
+													current ? { ...current, text: event.target.value } : current
+												)
+											}
+											disabled={disabled || saving}
+										/>
+									</label>
+								)}
+							</Card>
+
+							<div className="space-y-3">
+								<div className="flex items-center justify-between gap-2 px-1">
+									<h4 className="text-sm font-semibold text-gray-900">Lyric lines</h4>
+									{localErrors.length > 0 && (
+										<StatusBadge status={`${localErrors.length} issue(s)`} />
+									)}
+								</div>
+
+								{visibleSegmentIndices.length === 0 ? (
+									<div className="rounded-xl border border-dashed border-gray-300 bg-white px-5 py-8 text-center text-sm text-gray-500">
+										No lines match your search.
+									</div>
+								) : (
+									visibleSegmentIndices.map((index) => {
+										const segment = transcript.segments[index];
+										return (
+											<SegmentCard
+												key={`segment-${index}`}
+												cardRef={(node) => {
+													segmentRefs.current[index] = node;
+												}}
+												segment={segment}
+												index={index}
+												disabled={disabled}
+												saving={saving}
+												expanded={expandedSegment === index}
+												advancedMode={advancedMode}
+												errors={segmentErrorMap.get(index)}
+												onToggleWords={handleToggleWords}
+												onUpdateSegment={updateSegment}
+												onUpdateWord={updateWord}
+												onFocus={() => setActiveSegment(index)}
+											/>
+										);
+									})
+								)}
 							</div>
 
-							<div className="flex flex-wrap gap-2">
-								<button
-									type="button"
-									disabled={disabled || saving}
-									onClick={() => runAction(onSave, "save corrections")}
-									className="rounded-md bg-slate-700 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-								>
-									{saving ? "Saving..." : "Save Draft"}
-								</button>
-								<button
-									type="button"
-									disabled={disabled || saving || localErrors.length > 0}
-									onClick={() => runAction(onApprove, "approve corrections")}
-									className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-								>
-									Approve
-								</button>
-								<button
-									type="button"
-									disabled={disabled || saving}
-									onClick={async () => {
-										setSaving(true);
-										setActionError(null);
-										try {
-											loadedJobRef.current = null;
-											await onReset(job.name);
-											await fetchTranscript(job.name, { force: true });
-											await onJobUpdated?.();
-										} catch (err) {
-											setActionError(
-												parseFrappeError(err) || err.message || "Failed to reset manual edits"
-											);
-										} finally {
-											setSaving(false);
-										}
-									}}
-									className="rounded-md border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-								>
-									Reset
-								</button>
-								<button
-									type="button"
-									disabled={disabled || saving}
-									onClick={async () => {
-										setSaving(true);
-										setActionError(null);
-										try {
-											await onRegenerate(job.name);
-											await onJobUpdated?.();
-										} catch (err) {
-											setActionError(
-												parseFrappeError(err) || err.message || "Failed to regenerate subtitles"
-											);
-										} finally {
-											setSaving(false);
-										}
-									}}
-									className="rounded-md border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-								>
-									Regenerate Subtitles
-								</button>
-							</div>
-							<p className="text-xs text-gray-500">
-								Download manual JSON/SRT/VTT from the Downloads tab.
-							</p>
+							<Card className="sticky bottom-3 z-10 border-purple-200 bg-white/95 backdrop-blur">
+								<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+									<div className="text-xs text-gray-500">
+										<p>Save a draft anytime. Approve locks lyrics for karaoke.</p>
+										<p className="mt-1">Download manual JSON/SRT/VTT from the Downloads tab.</p>
+									</div>
+									<div className="flex flex-wrap gap-2">
+										<SecondaryButton
+											disabled={disabled || saving}
+											onClick={() => runAction(onSave, "save corrections")}
+										>
+											{saving ? "Saving..." : "Save draft"}
+										</SecondaryButton>
+										<button
+											type="button"
+											disabled={disabled || saving || localErrors.length > 0}
+											onClick={() => runAction(onApprove, "approve corrections")}
+											className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+										>
+											Approve for karaoke
+										</button>
+										<SecondaryButton
+											disabled={disabled || saving}
+											onClick={async () => {
+												setSaving(true);
+												setActionError(null);
+												try {
+													loadedJobRef.current = null;
+													await onReset(job.name);
+													await fetchTranscript(job.name, { force: true });
+													await onJobUpdated?.();
+												} catch (err) {
+													setActionError(
+														parseFrappeError(err) ||
+															err.message ||
+															"Failed to reset manual edits"
+													);
+												} finally {
+													setSaving(false);
+												}
+											}}
+										>
+											Reset
+										</SecondaryButton>
+										<SecondaryButton
+											disabled={disabled || saving}
+											onClick={async () => {
+												setSaving(true);
+												setActionError(null);
+												try {
+													await onRegenerate(job.name);
+													await onJobUpdated?.();
+												} catch (err) {
+													setActionError(
+														parseFrappeError(err) ||
+															err.message ||
+															"Failed to regenerate subtitles"
+													);
+												} finally {
+													setSaving(false);
+												}
+											}}
+										>
+											Regenerate subtitles
+										</SecondaryButton>
+									</div>
+								</div>
+							</Card>
 						</>
 					)}
-				</div>
+				</>
 			)}
 		</div>
 	);

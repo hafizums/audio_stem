@@ -43,6 +43,8 @@
   "transcription_status",
   "transcription_source",
   "transcription_model",
+  "transcription_provider",
+  "transcription_provider_model",
   "transcription_language",
   "transcript_text",
   "transcript_json_file",
@@ -58,6 +60,10 @@
   "transcription_first_segment_start",
   "transcription_bad_timestamp_count",
   "transcription_quality_warning",
+  "transcription_raw_provider_json_file",
+  "transcription_language_probability",
+  "transcription_keyterms_used",
+  "transcription_provider_warning",
   "section_break_manual_transcript",
   "manual_transcript_status",
   "manual_transcript_text",
@@ -340,6 +346,18 @@
    "read_only": 1
   },
   {
+   "fieldname": "transcription_provider",
+   "fieldtype": "Data",
+   "label": "Transcription Provider",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcription_provider_model",
+   "fieldtype": "Data",
+   "label": "Transcription Provider Model",
+   "read_only": 1
+  },
+  {
    "fieldname": "transcription_language",
    "fieldtype": "Data",
    "label": "Transcription Language",
@@ -427,6 +445,30 @@
    "fieldname": "transcription_quality_warning",
    "fieldtype": "Small Text",
    "label": "Transcription Quality Warning",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcription_raw_provider_json_file",
+   "fieldtype": "Attach",
+   "label": "Transcription Raw Provider JSON File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcription_language_probability",
+   "fieldtype": "Float",
+   "label": "Transcription Language Probability",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcription_keyterms_used",
+   "fieldtype": "Small Text",
+   "label": "Transcription Keyterms Used",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcription_provider_warning",
+   "fieldtype": "Small Text",
+   "label": "Transcription Provider Warning",
    "read_only": 1
   },
   {
